@@ -166,7 +166,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         this.zone.run(() => this.selectedNodeChange.emit(data));
       },
       doubleClick: (_event, node) => {
-        this.zone.run(() => this.recordOpen.emit(node.data as FaultTreeNodeData));
+        this.zone.run(() => this.recordOpen.emit((node as go.Node).data as FaultTreeNodeData));
       }
     };
 
