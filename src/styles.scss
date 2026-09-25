@@ -1,0 +1,76 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --nps-sidebar: #07182c;
+  --nps-topbar: #0b223d;
+  --nps-blue: #2563eb;
+  --nps-cyan: #06b6d4;
+  --nps-success: #16a34a;
+  --nps-warning: #d97706;
+  --nps-danger: #dc2626;
+  --nps-purple: #7c3aed;
+  --nps-app-bg: #f3f7fb;
+  --nps-surface: #ffffff;
+  --nps-surface-alt: #f8fbff;
+  --nps-border: #d9e3ee;
+  --nps-text: #172033;
+  --nps-text-muted: #64748b;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+app-root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  color: var(--nps-text);
+  background: var(--nps-app-bg);
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-size: 12px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+::selection {
+  background: #bfdbfe;
+  color: #0f172a;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #bdcad8;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
