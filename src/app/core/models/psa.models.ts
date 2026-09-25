@@ -50,10 +50,10 @@ export interface PsaRecord {
 }
 
 export interface ReliabilityParameterRef {
-  readonly code: 'q' | 'r' | 'f' | 'TR' | 'TI' | 'TF' | 'TM';
-  readonly parameterId: string;
-  readonly mean: number;
-  readonly unit?: string;
+  code: 'q' | 'r' | 'f' | 'TR' | 'TI' | 'TF' | 'TM';
+  parameterId: string;
+  mean: number;
+  unit?: string;
 }
 
 export interface BasicEventRecord extends PsaRecord {
