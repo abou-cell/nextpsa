@@ -431,7 +431,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     const fixedSymbolSlot = (content: go.GraphObject) => {
       reinforcePaletteStrokes(content);
-      content.scale = 0.82;
+      // Requested refinement: render palette symbols at 50% of the previous size.
+      content.scale = 0.41;
       return $(go.Panel, 'Spot',
         {
           width: 48,
