@@ -112,3 +112,10 @@ export interface ValidationIssue {
   message: string;
   location: string;
 }
+
+
+export interface ChangeNodeCandidate {
+  id: string;
+  description: string;
+  category: FaultTreeCategory;
+}

@@ -5,6 +5,7 @@ import { MockPsaRepository } from '../../core/data/mock-psa.repository';
 import { FaultTreeEditorComponent } from '../../gojs/fault-tree/fault-tree-editor.component';
 import { GateRecordDialogComponent } from './gate-record-dialog.component';
 import { BasicEventRecordDialogComponent } from '../data/basic-event-record-dialog.component';
+import { ChangeNodeEventDialogComponent } from './change-node-event-dialog.component';
 
 @Component({
   selector: 'app-fault-tree-page',
@@ -13,7 +14,8 @@ import { BasicEventRecordDialogComponent } from '../data/basic-event-record-dial
     CommonModule,
     FaultTreeEditorComponent,
     GateRecordDialogComponent,
-    BasicEventRecordDialogComponent
+    BasicEventRecordDialogComponent,
+    ChangeNodeEventDialogComponent
   ],
   template: `
     <section class="feature-page">
@@ -40,7 +42,8 @@ import { BasicEventRecordDialogComponent } from '../data/basic-event-record-dial
           <app-fault-tree-editor
             [model]="repository.faultTree()"
             (selectedNodeChange)="onSelection($event)"
-            (recordOpen)="openRecord($event)">
+            (recordOpen)="openRecord($event)"
+            (changeNodeEvent)="openChangeNode($event)">
           </app-fault-tree-editor>
         </main>
 
@@ -106,6 +109,13 @@ import { BasicEventRecordDialogComponent } from '../data/basic-event-record-dial
       (close)="openBasicEvent.set(null)"
       (save)="saveBasicEvent($event)">
     </app-basic-event-record-dialog>
+
+    <app-change-node-event-dialog
+      [node]="changeNodeTarget()"
+      [candidates]="changeNodeCandidates()"
+      (close)="closeChangeNode()"
+      (apply)="applyChangeNode($event)">
+    </app-change-node-event-dialog>
   `,
   styles: [`
     :host { display: block; height: 100%; min-height: 0; }
@@ -150,6 +160,7 @@ export class FaultTreePageComponent {
   readonly selectedNode = signal<FaultTreeNodeData | null>(null);
   readonly openGate = signal<GateRecord | null>(null);
   readonly openBasicEvent = signal<BasicEventRecord | null>(null);
+  readonly changeNodeTarget = signal<FaultTreeNodeData | null>(null);
 
   readonly selectedDirectInputs = computed(() => this.directInputsFor(this.selectedNode()?.id));
   readonly selectedBasicEvents = computed(() => {
@@ -164,6 +175,10 @@ export class FaultTreePageComponent {
     const gate = this.openGate();
     return gate ? this.repository.childBasicEvents(gate.id) : [];
   });
+
+  readonly changeNodeCandidates = computed(() =>
+    this.repository.replacementCandidates(this.changeNodeTarget())
+  );
 
   constructor(readonly repository: MockPsaRepository) {}
 
@@ -192,6 +207,21 @@ export class FaultTreePageComponent {
   saveBasicEvent(event: BasicEventRecord): void {
     this.repository.updateBasicEvent(event);
     this.openBasicEvent.set(this.repository.basicEvent(event.id) ?? null);
+  }
+
+  openChangeNode(node: FaultTreeNodeData): void {
+    this.changeNodeTarget.set(node);
+  }
+
+  closeChangeNode(): void {
+    this.changeNodeTarget.set(null);
+  }
+
+  applyChangeNode(replacementId: string): void {
+    const target = this.changeNodeTarget();
+    if (!target) return;
+    this.repository.changeFaultTreeNodeReference(target.key, replacementId);
+    this.changeNodeTarget.set(null);
   }
 
   private directInputsFor(parentId: string | undefined): FaultTreeNodeData[] {

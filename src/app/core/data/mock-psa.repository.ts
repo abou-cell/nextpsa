@@ -1,7 +1,9 @@
 import { Injectable, signal } from '@angular/core';
 import {
   BasicEventRecord,
+  ChangeNodeCandidate,
   FaultTreeModel,
+  FaultTreeNodeData,
   GateRecord,
   ValidationIssue
 } from '../models/psa.models';
@@ -108,6 +110,82 @@ export class MockPsaRepository {
     };
     visit(gateId);
     return this.basicEvents().filter((event) => found.has(event.id));
+  }
+
+  replacementCandidates(node: FaultTreeNodeData | null): ChangeNodeCandidate[] {
+    if (!node) return [];
+
+    if (node.category === 'BASIC_EVENT') {
+      return this.basicEvents()
+        .filter((event) => event.id !== node.id)
+        .map((event) => ({
+          id: event.id,
+          description: event.description,
+          category: 'BASIC_EVENT' as const
+        }));
+    }
+
+    if (node.category === 'HOUSE_EVENT' || node.category === 'TRANSFER') {
+      const seen = new Set<string>();
+      return this.faultTree().nodes
+        .filter((candidate) =>
+          candidate.category === node.category &&
+          candidate.id !== node.id &&
+          !seen.has(candidate.id)
+        )
+        .map((candidate) => {
+          seen.add(candidate.id);
+          return {
+            id: candidate.id,
+            description: candidate.description,
+            category: candidate.category
+          };
+        });
+    }
+
+    return [];
+  }
+
+  changeFaultTreeNodeReference(nodeKey: string, replacementId: string): void {
+    this.faultTree.update((model) => {
+      const current = model.nodes.find((node) => node.key === nodeKey);
+      if (!current) return model;
+
+      let replacement: Partial<FaultTreeNodeData> | undefined;
+
+      if (current.category === 'BASIC_EVENT') {
+        const event = this.basicEvent(replacementId);
+        if (!event) return model;
+        replacement = {
+          id: event.id,
+          description: event.description,
+          state: event.state,
+          reliabilityModel: event.reliabilityModel,
+          symbol: event.symbol
+        };
+      } else if (current.category === 'HOUSE_EVENT' || current.category === 'TRANSFER') {
+        const candidate = model.nodes.find(
+          (node) => node.category === current.category && node.id === replacementId
+        );
+        if (!candidate) return model;
+        replacement = {
+          id: candidate.id,
+          description: candidate.description,
+          state: candidate.state
+        };
+      } else {
+        return model;
+      }
+
+      return {
+        ...model,
+        nodes: model.nodes.map((node) =>
+          node.key === nodeKey
+            ? { ...node, ...replacement }
+            : node
+        )
+      };
+    });
   }
 
   updateBasicEvent(updated: BasicEventRecord): void {

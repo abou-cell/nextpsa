@@ -153,11 +153,7 @@ import {
       min-height: 470px;
       width: 100%;
       height: 100%;
-      background-color: #fff;
-      background-image:
-        linear-gradient(#eef2f6 1px, transparent 1px),
-        linear-gradient(90deg, #eef2f6 1px, transparent 1px);
-      background-size: 16px 16px;
+      background: #fff;
     }
 
     @media (max-width: 1180px) {
@@ -176,6 +172,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   @Input({ required: true }) model!: FaultTreeModel;
   @Output() readonly selectedNodeChange = new EventEmitter<FaultTreeNodeData | null>();
   @Output() readonly recordOpen = new EventEmitter<FaultTreeNodeData>();
+  @Output() readonly changeNodeEvent = new EventEmitter<FaultTreeNodeData>();
 
   private diagram?: go.Diagram;
   private palette?: go.Palette;
@@ -217,19 +214,20 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   }
 
   /**
-   * Visible input port used by every Fault Tree record.
-   * For Gate records this is paired with an OUT port at the bottom.
-   * Terminal records (BE / HE / Diamond / Transfer) only expose this IN port.
+   * RiskSpectrum does not draw visible connection handles. The ports remain
+   * available to GoJS for precise routing and hit-testing but are fully transparent.
    */
   private makeTopPort(): go.Shape {
     const $ = go.GraphObject.make;
-    return $(go.Shape, 'Circle', {
+    return $(go.Shape, 'Rectangle', {
       portId: 'IN',
-      desiredSize: new go.Size(7, 7),
-      fill: '#ffffff',
-      stroke: '#111827',
-      strokeWidth: 1.2,
-      alignment: new go.Spot(0.5, 0, 0, -3),
+      width: 12,
+      height: 8,
+      fill: 'transparent',
+      stroke: null,
+      opacity: 0,
+      alignment: go.Spot.Top,
+      alignmentFocus: go.Spot.Center,
       fromLinkable: false,
       toLinkable: true,
       toSpot: go.Spot.Top,
@@ -237,16 +235,18 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     });
   }
 
-  /** Visible Gate output port. */
+  /** Invisible logical output for Gate / Top Event nodes only. */
   private makeBottomPort(): go.Shape {
     const $ = go.GraphObject.make;
-    return $(go.Shape, 'Circle', {
+    return $(go.Shape, 'Rectangle', {
       portId: 'OUT',
-      desiredSize: new go.Size(7, 7),
-      fill: '#ffffff',
-      stroke: '#111827',
-      strokeWidth: 1.2,
-      alignment: new go.Spot(0.5, 1, 0, 0),
+      width: 12,
+      height: 8,
+      fill: 'transparent',
+      stroke: null,
+      opacity: 0,
+      alignment: go.Spot.Bottom,
+      alignmentFocus: go.Spot.Center,
       fromLinkable: true,
       toLinkable: false,
       fromSpot: go.Spot.Bottom,
@@ -257,42 +257,62 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private initializeDiagram(): void {
     const $ = go.GraphObject.make;
 
-    const labelPanel = (fill = '#f2f2f2', stroke = '#777777') =>
+    const labelPanel = (fill = '#ffffff', stroke = '#111827') =>
       $(go.Panel, 'Auto',
-        { name: 'LABEL' },
+        {
+          name: 'LABEL',
+          width: 132,
+          height: 69
+        },
         $(go.Shape, 'RoundedRectangle', {
           fill,
           stroke,
           strokeWidth: 1,
-          parameter1: 3
+          parameter1: 2
         }),
-        $(go.Panel, 'Vertical',
+        $(go.Panel, 'Table',
           {
-            margin: new go.Margin(5, 8),
-            maxSize: new go.Size(178, NaN)
+            width: 132,
+            height: 69,
+            defaultStretch: go.Stretch.Horizontal
           },
+          $(go.RowColumnDefinition, { row: 0, height: 50 }),
+          $(go.RowColumnDefinition, { row: 1, height: 19 }),
           $(go.TextBlock, {
-            font: '700 9px Inter, sans-serif',
-            stroke: '#111827',
-            textAlign: 'center'
-          }, new go.Binding('text', 'id')),
-          $(go.TextBlock, {
-            margin: new go.Margin(2, 0, 0, 0),
-            font: '8px Inter, sans-serif',
-            stroke: '#475569',
-            textAlign: 'center',
+            row: 0,
+            margin: new go.Margin(3, 4, 2, 4),
+            font: '10px Inter, "Segoe UI", sans-serif',
+            stroke: '#111111',
+            textAlign: 'left',
+            verticalAlignment: go.Spot.Top,
             wrap: go.Wrap.Fit,
-            maxSize: new go.Size(160, 32)
-          }, new go.Binding('text', 'description'))
+            overflow: go.TextOverflow.Ellipsis,
+            maxLines: 3
+          }, new go.Binding('text', 'description')),
+          $(go.Shape, 'LineH', {
+            row: 1,
+            alignment: go.Spot.Top,
+            stretch: go.Stretch.Horizontal,
+            stroke,
+            strokeWidth: 1
+          }),
+          $(go.TextBlock, {
+            row: 1,
+            margin: new go.Margin(2, 3, 1, 3),
+            font: '10px Inter, "Segoe UI", sans-serif',
+            stroke: '#111111',
+            textAlign: 'center',
+            verticalAlignment: go.Spot.Center
+          }, new go.Binding('text', 'id'))
         )
       );
 
-    const recordToSymbolConnector = (height = 7) =>
+    const recordToSymbolConnector = (height = 4) =>
       $(go.Shape, 'LineV', {
         width: 1,
         height,
-        stroke: '#374151',
-        strokeWidth: 1.15,
+        stroke: '#111111',
+        strokeWidth: 1,
         margin: 0
       });
 
@@ -304,41 +324,41 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const gateArtwork = (gateType: GateType, includeOutputPort = true) =>
       $(go.Panel, 'Spot',
         {
-          width: 64,
-          height: 50
+          width: 40,
+          height: 34
         },
         $(go.Shape, {
-            width: 56,
-            height: 36,
+            width: 32,
+            height: 27,
             stretch: go.Stretch.Fill,
             fill: '#ffffff',
-            stroke: '#1f2937',
-            strokeWidth: gateType === 'AND' || gateType === 'NAND' ? 1.9 : 1.8,
-            alignment: new go.Spot(0.5, 0.58),
+            stroke: '#111111',
+            strokeWidth: 1.25,
+            alignment: new go.Spot(0.5, 0.62),
             visible: !isKofNGate(gateType),
             geometryString: gateGeometry(gateType)
           }
         ),
         $(go.Shape, 'Circle', {
-          desiredSize: new go.Size(8, 8),
+          desiredSize: new go.Size(6, 6),
           fill: '#ffffff',
-          stroke: '#1f2937',
-          strokeWidth: 1.4,
-          alignment: new go.Spot(0.5, 0, 0, 4),
+          stroke: '#111111',
+          strokeWidth: 1.1,
+          alignment: new go.Spot(0.5, 0, 0, 3),
           visible: hasOutputNegationBubble(gateType)
         }),
         $(go.Shape, 'Rectangle', {
-          desiredSize: new go.Size(36, 22),
+          desiredSize: new go.Size(28, 20),
           fill: '#ffffff',
-          stroke: '#1f2937',
-          strokeWidth: 1.7,
-          alignment: new go.Spot(0.5, 0.56),
+          stroke: '#111111',
+          strokeWidth: 1.1,
+          alignment: new go.Spot(0.5, 0.60),
           visible: isKofNGate(gateType)
         }),
         $(go.TextBlock, {
-            font: '700 9px Inter, sans-serif',
-            stroke: '#111827',
-            alignment: new go.Spot(0.5, 0.56),
+            font: '8px Inter, sans-serif',
+            stroke: '#111111',
+            alignment: new go.Spot(0.5, 0.60),
             visible: isKofNGate(gateType)
           },
           new go.Binding('text', 'k', (k: number | undefined) => gateCaption(gateType, k))
@@ -350,16 +370,16 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       $(go.Shape, 'Circle', {
         desiredSize: new go.Size(28, 28),
         fill: '#ffffff',
-        stroke: '#1f2937',
-        strokeWidth: 1.7
+        stroke: '#111111',
+        strokeWidth: 1.2
       });
 
     const diamondArtwork = () =>
       $(go.Shape, 'Diamond', {
         desiredSize: new go.Size(26, 26),
         fill: '#ffffff',
-        stroke: '#1f2937',
-        strokeWidth: 1.7
+        stroke: '#111111',
+        strokeWidth: 1.2
       });
 
     const houseArtwork = () =>
@@ -368,8 +388,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         desiredSize: new go.Size(28, 24),
         stretch: go.Stretch.Fill,
         fill: '#ffffff',
-        stroke: '#1f2937',
-        strokeWidth: 1.7
+        stroke: '#111111',
+        strokeWidth: 1.2
       });
 
     const transferArtwork = () =>
@@ -378,8 +398,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         desiredSize: new go.Size(26, 26),
         stretch: go.Stretch.Fill,
         fill: '#ffffff',
-        stroke: '#1f2937',
-        strokeWidth: 1.7
+        stroke: '#111111',
+        strokeWidth: 1.2
       });
 
     const baseNodeProperties: Partial<go.Node> = {
@@ -394,16 +414,122 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       }
     };
 
+    const contextNode = (obj: go.GraphObject): go.Node | null => {
+      const adornment = obj.part;
+      if (!(adornment instanceof go.Adornment)) return null;
+      return adornment.adornedPart instanceof go.Node ? adornment.adornedPart : null;
+    };
+
+    const menuSeparator = () =>
+      $(go.Shape, 'LineH', {
+        stretch: go.Stretch.Horizontal,
+        height: 1,
+        stroke: '#d1d5db',
+        margin: new go.Margin(3, 2)
+      });
+
+    const menuButton = (
+      label: string,
+      action: string,
+      enabled = true
+    ) =>
+      $('ContextMenuButton',
+        {
+          height: 25,
+          stretch: go.Stretch.Horizontal,
+          isEnabled: enabled,
+          opacity: enabled ? 1 : 0.42,
+          click: (_event: go.InputEvent, obj: go.GraphObject) => {
+            if (!enabled) return;
+            const node = contextNode(obj);
+            if (node) this.handleContextAction(action, node);
+          }
+        },
+        $(go.TextBlock, label, {
+          width: 176,
+          margin: new go.Margin(3, 8),
+          font: '10px Inter, "Segoe UI", sans-serif',
+          stroke: '#111827',
+          textAlign: 'left'
+        })
+      );
+
+    const gateContextMenu = () =>
+      $('ContextMenu',
+        menuButton('Edit Event...', 'EDIT'),
+        menuButton('Change node Event...', 'CHANGE_NODE', false),
+        menuButton('Add input node   ›', 'ADD_INPUT'),
+        menuButton('Negate node', 'NEGATE'),
+        menuButton('State   ›', 'STATE'),
+        menuSeparator(),
+        menuButton('Edit Fault Tree...', 'EDIT_FAULT_TREE'),
+        menuButton('Insert Fault Tree...', 'INSERT_FAULT_TREE'),
+        menuSeparator(),
+        menuButton('Break into Transfer...', 'BREAK_TRANSFER'),
+        menuButton('Join transfer', 'JOIN_TRANSFER', false),
+        menuButton('Jump', 'JUMP', false),
+        menuButton('Jump to IE/FE', 'JUMP_IEFE', false),
+        menuButton('Open Transfer branch', 'OPEN_TRANSFER_BRANCH', false),
+        menuButton('Open CCF Group', 'OPEN_CCF_GROUP', false),
+        menuSeparator(),
+        menuButton('Select branch', 'SELECT_BRANCH'),
+        menuButton('Select inputs', 'SELECT_INPUTS'),
+        menuSeparator(),
+        menuButton('Cut', 'CUT'),
+        menuButton('Copy', 'COPY'),
+        menuButton('Paste', 'PASTE'),
+        menuButton('Delete', 'DELETE'),
+        menuSeparator(),
+        menuButton('Find...', 'FIND'),
+        menuButton('Replace...', 'REPLACE'),
+        menuSeparator(),
+        menuButton('Set record Status   ›', 'RECORD_STATUS')
+      );
+
+    const terminalContextMenu = (transfer = false) =>
+      $('ContextMenu',
+        menuButton('Edit Event...', 'EDIT'),
+        menuButton('Change node Event...', 'CHANGE_NODE'),
+        menuButton('Add input node   ›', 'ADD_INPUT'),
+        menuButton('Negate node', 'NEGATE'),
+        menuButton('State   ›', 'STATE'),
+        menuSeparator(),
+        menuButton('Edit Fault Tree...', 'EDIT_FAULT_TREE'),
+        menuButton('Insert Fault Tree...', 'INSERT_FAULT_TREE'),
+        menuSeparator(),
+        menuButton('Break into Transfer...', 'BREAK_TRANSFER', false),
+        menuButton('Join transfer', 'JOIN_TRANSFER', transfer),
+        menuButton('Jump', 'JUMP', transfer),
+        menuButton('Jump to IE/FE', 'JUMP_IEFE', false),
+        menuButton('Open Transfer branch', 'OPEN_TRANSFER_BRANCH', transfer),
+        menuSeparator(),
+        menuButton('Select branch', 'SELECT_BRANCH', false),
+        menuButton('Select inputs', 'SELECT_INPUTS', false),
+        menuSeparator(),
+        menuButton('Cut', 'CUT'),
+        menuButton('Copy', 'COPY'),
+        menuButton('Paste', 'PASTE'),
+        menuButton('Delete', 'DELETE'),
+        menuSeparator(),
+        menuButton('Find...', 'FIND'),
+        menuButton('Replace...', 'REPLACE'),
+        menuSeparator(),
+        menuButton('Set record Status   ›', 'RECORD_STATUS')
+      );
+
     const makeGateNodeTemplate = (
       gateType: GateType,
       topEvent = false
     ) =>
       $(go.Node, 'Spot',
         baseNodeProperties,
-        { selectionObjectName: 'LABEL' },
+        {
+          selectionObjectName: 'LABEL',
+          contextMenu: gateContextMenu()
+        },
         $(go.Panel, 'Vertical',
-          labelPanel(topEvent ? '#cfcfcf' : '#f2f2f2', topEvent ? '#5f5f5f' : '#777777'),
-          recordToSymbolConnector(7),
+          labelPanel(topEvent ? '#d0d0d0' : '#ffffff', '#111111'),
+          recordToSymbolConnector(4),
           gateArtwork(gateType, true)
         ),
         this.makeTopPort()
@@ -411,16 +537,19 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     const makeTerminalNodeTemplate = (
       artwork: go.GraphObject,
-      connectorHeight = 6
+      connectorHeight = 4
     ) =>
       $(go.Node, 'Spot',
         baseNodeProperties,
-        { selectionObjectName: 'LABEL' },
+        {
+          selectionObjectName: 'LABEL',
+          contextMenu: terminalContextMenu(artwork instanceof go.Shape && artwork.geometryString === TRANSFER_GEOMETRY)
+        },
         $(go.Panel, 'Vertical',
-          labelPanel('#f6f6f6', '#888888'),
+          labelPanel('#ffffff', '#111111'),
           recordToSymbolConnector(connectorHeight),
           $(go.Panel, 'Spot',
-            { width: 46, height: 46 },
+            { width: 34, height: 32 },
             artwork
           )
         ),
@@ -433,7 +562,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       contentAlignment: go.Spot.TopCenter,
       padding: 42,
       grid: $(go.Panel, 'Grid',
-        { gridCellSize: new go.Size(16, 16) },
+        { gridCellSize: new go.Size(16, 16), visible: false },
         $(go.Shape, 'LineH', { stroke: '#eef2f6', strokeWidth: 0.45 }),
         $(go.Shape, 'LineV', { stroke: '#eef2f6', strokeWidth: 0.45 })
       ),
@@ -441,8 +570,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       'undoManager.isEnabled': true,
       layout: $(go.TreeLayout, {
         angle: 90,
-        layerSpacing: 66,
-        nodeSpacing: 30,
+        layerSpacing: 38,
+        nodeSpacing: 16,
         alignment: go.TreeAlignment.CenterChildren,
         compaction: go.TreeCompaction.Block
       })
@@ -603,6 +732,92 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     palette.model = paletteModel;
 
     this.palette = palette;
+  }
+
+  private handleContextAction(action: string, node: go.Node): void {
+    const diagram = node.diagram;
+    if (!diagram) return;
+
+    diagram.select(node);
+
+    switch (action) {
+      case 'EDIT':
+        this.zone.run(() => this.recordOpen.emit(node.data as FaultTreeNodeData));
+        return;
+
+      case 'CHANGE_NODE': {
+        const data = node.data as FaultTreeNodeData;
+        if (
+          data.category === 'BASIC_EVENT' ||
+          data.category === 'HOUSE_EVENT' ||
+          data.category === 'TRANSFER'
+        ) {
+          this.zone.run(() => this.changeNodeEvent.emit(data));
+        }
+        return;
+      }
+
+      case 'NEGATE': {
+        const incoming = node.findLinksInto().first();
+        if (!incoming) return;
+        diagram.startTransaction('Negate fault-tree node');
+        const model = diagram.model as go.GraphLinksModel;
+        model.setDataProperty(
+          incoming.data,
+          'negated',
+          !Boolean((incoming.data as { negated?: boolean }).negated)
+        );
+        diagram.commitTransaction('Negate fault-tree node');
+        return;
+      }
+
+      case 'SELECT_BRANCH': {
+        diagram.clearSelection();
+        const visit = (current: go.Node): void => {
+          current.isSelected = true;
+          current.findNodesOutOf().each((child) => visit(child));
+        };
+        visit(node);
+        return;
+      }
+
+      case 'SELECT_INPUTS':
+        diagram.clearSelection();
+        node.findNodesOutOf().each((child) => {
+          child.isSelected = true;
+        });
+        return;
+
+      case 'CUT':
+        diagram.commandHandler.cutSelection();
+        return;
+
+      case 'COPY':
+        diagram.commandHandler.copySelection();
+        return;
+
+      case 'PASTE':
+        diagram.commandHandler.pasteSelection();
+        return;
+
+      case 'DELETE':
+        diagram.commandHandler.deleteSelection();
+        return;
+
+      case 'FIND':
+        diagram.centerRect(node.actualBounds);
+        return;
+
+      case 'EDIT_FAULT_TREE':
+        diagram.centerRect(node.actualBounds);
+        return;
+
+      default:
+        // The remaining entries are intentionally present to mirror the
+        // RiskSpectrum context menu. Their backend/domain workflows are added
+        // in later NextPSA vertical slices.
+        return;
+    }
   }
 
   /**
