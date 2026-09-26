@@ -14,7 +14,7 @@ import { GateType } from '../../core/models/psa.models';
  * are intentionally kept independent so a link can touch the exact visual symbol.
  */
 const AND_GEOMETRY =
-  'F M6 40 L6 22 C6 9 16 0 30 0 C44 0 54 9 54 22 L54 40 Z';
+  'F M6 40 L6 19 C6 8 16 1 30 1 C44 1 54 8 54 19 L54 40 Z';
 
 const OR_GEOMETRY =
   'F M4 40 Q8 9 30 0 Q52 9 56 40 Q30 29 4 40 Z';
