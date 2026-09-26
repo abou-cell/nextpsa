@@ -55,32 +55,40 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
 
     let root: go.Node | null = null;
 
-    diagram.nodes.each((node) => {
-      if (root) return;
-      const data = node.data as FaultTreeNodeData;
-      if (data.category === 'TOP_EVENT') root = node;
-    });
+    const nodeIterator = diagram.nodes;
+    while (nodeIterator.next()) {
+      const candidate = nodeIterator.value;
+      const data = candidate.data as FaultTreeNodeData;
+      if (data.category === 'TOP_EVENT') {
+        root = candidate;
+        break;
+      }
+    }
 
     if (!root) {
-      diagram.nodes.each((node) => {
-        if (root) return;
-        if (!node.findLinksInto().first()) root = node;
-      });
+      const fallbackIterator = diagram.nodes;
+      while (fallbackIterator.next()) {
+        const candidate = fallbackIterator.value;
+        if (!candidate.findLinksInto().first()) {
+          root = candidate;
+          break;
+        }
+      }
     }
 
     if (!root) return;
 
-    const layoutRootPosition = root.position.copy();
+    const fixedRoot = root;
+    const layoutRootPosition = fixedRoot.position.copy();
+    const anchor = this.rootAnchor ?? layoutRootPosition.copy();
 
-    if (!this.rootAnchor) {
-      this.rootAnchor = layoutRootPosition.copy();
-    }
+    this.rootAnchor = anchor;
 
-    const xShift = this.rootAnchor.x - layoutRootPosition.x;
+    const xShift = anchor.x - layoutRootPosition.x;
     const depth = new Map<go.Node, number>();
-    const queue: go.Node[] = [root];
+    const queue: go.Node[] = [fixedRoot];
 
-    depth.set(root, 0);
+    depth.set(fixedRoot, 0);
 
     while (queue.length) {
       const current = queue.shift()!;
@@ -100,7 +108,7 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
     depth.forEach((level, node) => {
       node.moveTo(
         node.position.x + xShift,
-        this.rootAnchor!.y + level * RiskSpectrumLevelLayout.LEVEL_PITCH
+        anchor.y + level * RiskSpectrumLevelLayout.LEVEL_PITCH
       );
     });
   }
@@ -885,20 +893,22 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     diagram: go.Diagram,
     paletteData: FaultTreeNodeData
   ): void {
-    let parent: go.Node | null = null;
+    const selectedPart = diagram.selection.first();
 
-    diagram.selection.each((part) => {
-      if (parent || !(part instanceof go.Node)) return;
-      const data = part.data as FaultTreeNodeData;
+    if (!(selectedPart instanceof go.Node)) return;
 
-      if (data.category === 'TOP_EVENT' || data.category === 'GATE') {
-        parent = part;
-      }
-    });
+    const selectedData = selectedPart.data as FaultTreeNodeData;
 
     // A terminal event cannot become a logical father. If no Gate/Top Event is
     // selected, a palette click is intentionally a no-op.
-    if (!parent) return;
+    if (
+      selectedData.category !== 'TOP_EVENT' &&
+      selectedData.category !== 'GATE'
+    ) {
+      return;
+    }
+
+    const parent = selectedPart;
 
     const serial = ++this.insertionSerial;
     const prefix = this.paletteNodePrefix(paletteData);
