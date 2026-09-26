@@ -734,6 +734,92 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     this.palette = palette;
   }
 
+  private handleContextAction(action: string, node: go.Node): void {
+    const diagram = node.diagram;
+    if (!diagram) return;
+
+    diagram.select(node);
+
+    switch (action) {
+      case 'EDIT':
+        this.zone.run(() => this.recordOpen.emit(node.data as FaultTreeNodeData));
+        return;
+
+      case 'CHANGE_NODE': {
+        const data = node.data as FaultTreeNodeData;
+        if (
+          data.category === 'BASIC_EVENT' ||
+          data.category === 'HOUSE_EVENT' ||
+          data.category === 'TRANSFER'
+        ) {
+          this.zone.run(() => this.changeNodeEvent.emit(data));
+        }
+        return;
+      }
+
+      case 'NEGATE': {
+        const incoming = node.findLinksInto().first();
+        if (!incoming) return;
+        diagram.startTransaction('Negate fault-tree node');
+        const model = diagram.model as go.GraphLinksModel;
+        model.setDataProperty(
+          incoming.data,
+          'negated',
+          !Boolean((incoming.data as { negated?: boolean }).negated)
+        );
+        diagram.commitTransaction('Negate fault-tree node');
+        return;
+      }
+
+      case 'SELECT_BRANCH': {
+        diagram.clearSelection();
+        const visit = (current: go.Node): void => {
+          current.isSelected = true;
+          current.findNodesOutOf().each((child) => visit(child));
+        };
+        visit(node);
+        return;
+      }
+
+      case 'SELECT_INPUTS':
+        diagram.clearSelection();
+        node.findNodesOutOf().each((child) => {
+          child.isSelected = true;
+        });
+        return;
+
+      case 'CUT':
+        diagram.commandHandler.cutSelection();
+        return;
+
+      case 'COPY':
+        diagram.commandHandler.copySelection();
+        return;
+
+      case 'PASTE':
+        diagram.commandHandler.pasteSelection();
+        return;
+
+      case 'DELETE':
+        diagram.commandHandler.deleteSelection();
+        return;
+
+      case 'FIND':
+        diagram.centerRect(node.actualBounds);
+        return;
+
+      case 'EDIT_FAULT_TREE':
+        diagram.centerRect(node.actualBounds);
+        return;
+
+      default:
+        // The remaining entries are intentionally present to mirror the
+        // RiskSpectrum context menu. Their backend/domain workflows are added
+        // in later NextPSA vertical slices.
+        return;
+    }
+  }
+
   /**
    * Connect newly dropped palette nodes as CHILDREN of the most plausible
    * Gate / Top Event. Direction is always parent OUT -> child IN.
