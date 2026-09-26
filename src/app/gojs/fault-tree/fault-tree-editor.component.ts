@@ -257,42 +257,62 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private initializeDiagram(): void {
     const $ = go.GraphObject.make;
 
-    const labelPanel = (fill = '#f2f2f2', stroke = '#777777') =>
+    const labelPanel = (fill = '#ffffff', stroke = '#111827') =>
       $(go.Panel, 'Auto',
-        { name: 'LABEL' },
+        {
+          name: 'LABEL',
+          width: 132,
+          height: 69
+        },
         $(go.Shape, 'RoundedRectangle', {
           fill,
           stroke,
           strokeWidth: 1,
-          parameter1: 3
+          parameter1: 2
         }),
-        $(go.Panel, 'Vertical',
+        $(go.Panel, 'Table',
           {
-            margin: new go.Margin(5, 8),
-            maxSize: new go.Size(178, NaN)
+            width: 132,
+            height: 69,
+            defaultStretch: go.Stretch.Horizontal
           },
+          $(go.RowColumnDefinition, { row: 0, height: 50 }),
+          $(go.RowColumnDefinition, { row: 1, height: 19 }),
           $(go.TextBlock, {
-            font: '700 9px Inter, sans-serif',
-            stroke: '#111827',
-            textAlign: 'center'
-          }, new go.Binding('text', 'id')),
-          $(go.TextBlock, {
-            margin: new go.Margin(2, 0, 0, 0),
-            font: '8px Inter, sans-serif',
-            stroke: '#475569',
-            textAlign: 'center',
+            row: 0,
+            margin: new go.Margin(3, 4, 2, 4),
+            font: '10px Inter, "Segoe UI", sans-serif',
+            stroke: '#111111',
+            textAlign: 'left',
+            verticalAlignment: go.Spot.Top,
             wrap: go.Wrap.Fit,
-            maxSize: new go.Size(160, 32)
-          }, new go.Binding('text', 'description'))
+            overflow: go.TextOverflow.Ellipsis,
+            maxLines: 3
+          }, new go.Binding('text', 'description')),
+          $(go.Shape, 'LineH', {
+            row: 1,
+            alignment: go.Spot.Top,
+            stretch: go.Stretch.Horizontal,
+            stroke,
+            strokeWidth: 1
+          }),
+          $(go.TextBlock, {
+            row: 1,
+            margin: new go.Margin(2, 3, 1, 3),
+            font: '10px Inter, "Segoe UI", sans-serif',
+            stroke: '#111111',
+            textAlign: 'center',
+            verticalAlignment: go.Spot.Center
+          }, new go.Binding('text', 'id'))
         )
       );
 
-    const recordToSymbolConnector = (height = 7) =>
+    const recordToSymbolConnector = (height = 4) =>
       $(go.Shape, 'LineV', {
         width: 1,
         height,
-        stroke: '#374151',
-        strokeWidth: 1.15,
+        stroke: '#111111',
+        strokeWidth: 1,
         margin: 0
       });
 
@@ -304,41 +324,41 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const gateArtwork = (gateType: GateType, includeOutputPort = true) =>
       $(go.Panel, 'Spot',
         {
-          width: 64,
-          height: 50
+          width: 40,
+          height: 34
         },
         $(go.Shape, {
-            width: 56,
-            height: 36,
+            width: 32,
+            height: 27,
             stretch: go.Stretch.Fill,
             fill: '#ffffff',
-            stroke: '#1f2937',
-            strokeWidth: gateType === 'AND' || gateType === 'NAND' ? 1.9 : 1.8,
-            alignment: new go.Spot(0.5, 0.58),
+            stroke: '#111111',
+            strokeWidth: 1.25,
+            alignment: new go.Spot(0.5, 0.62),
             visible: !isKofNGate(gateType),
             geometryString: gateGeometry(gateType)
           }
         ),
         $(go.Shape, 'Circle', {
-          desiredSize: new go.Size(8, 8),
+          desiredSize: new go.Size(6, 6),
           fill: '#ffffff',
-          stroke: '#1f2937',
-          strokeWidth: 1.4,
-          alignment: new go.Spot(0.5, 0, 0, 4),
+          stroke: '#111111',
+          strokeWidth: 1.1,
+          alignment: new go.Spot(0.5, 0, 0, 3),
           visible: hasOutputNegationBubble(gateType)
         }),
         $(go.Shape, 'Rectangle', {
-          desiredSize: new go.Size(36, 22),
+          desiredSize: new go.Size(28, 20),
           fill: '#ffffff',
-          stroke: '#1f2937',
-          strokeWidth: 1.7,
-          alignment: new go.Spot(0.5, 0.56),
+          stroke: '#111111',
+          strokeWidth: 1.1,
+          alignment: new go.Spot(0.5, 0.60),
           visible: isKofNGate(gateType)
         }),
         $(go.TextBlock, {
-            font: '700 9px Inter, sans-serif',
-            stroke: '#111827',
-            alignment: new go.Spot(0.5, 0.56),
+            font: '8px Inter, sans-serif',
+            stroke: '#111111',
+            alignment: new go.Spot(0.5, 0.60),
             visible: isKofNGate(gateType)
           },
           new go.Binding('text', 'k', (k: number | undefined) => gateCaption(gateType, k))
@@ -350,16 +370,16 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       $(go.Shape, 'Circle', {
         desiredSize: new go.Size(28, 28),
         fill: '#ffffff',
-        stroke: '#1f2937',
-        strokeWidth: 1.7
+        stroke: '#111111',
+        strokeWidth: 1.2
       });
 
     const diamondArtwork = () =>
       $(go.Shape, 'Diamond', {
         desiredSize: new go.Size(26, 26),
         fill: '#ffffff',
-        stroke: '#1f2937',
-        strokeWidth: 1.7
+        stroke: '#111111',
+        strokeWidth: 1.2
       });
 
     const houseArtwork = () =>
@@ -368,8 +388,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         desiredSize: new go.Size(28, 24),
         stretch: go.Stretch.Fill,
         fill: '#ffffff',
-        stroke: '#1f2937',
-        strokeWidth: 1.7
+        stroke: '#111111',
+        strokeWidth: 1.2
       });
 
     const transferArtwork = () =>
@@ -378,8 +398,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         desiredSize: new go.Size(26, 26),
         stretch: go.Stretch.Fill,
         fill: '#ffffff',
-        stroke: '#1f2937',
-        strokeWidth: 1.7
+        stroke: '#111111',
+        strokeWidth: 1.2
       });
 
     const baseNodeProperties: Partial<go.Node> = {
@@ -402,8 +422,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         baseNodeProperties,
         { selectionObjectName: 'LABEL' },
         $(go.Panel, 'Vertical',
-          labelPanel(topEvent ? '#cfcfcf' : '#f2f2f2', topEvent ? '#5f5f5f' : '#777777'),
-          recordToSymbolConnector(7),
+          labelPanel(topEvent ? '#d0d0d0' : '#ffffff', '#111111'),
+          recordToSymbolConnector(4),
           gateArtwork(gateType, true)
         ),
         this.makeTopPort()
@@ -411,16 +431,16 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     const makeTerminalNodeTemplate = (
       artwork: go.GraphObject,
-      connectorHeight = 6
+      connectorHeight = 4
     ) =>
       $(go.Node, 'Spot',
         baseNodeProperties,
         { selectionObjectName: 'LABEL' },
         $(go.Panel, 'Vertical',
-          labelPanel('#f6f6f6', '#888888'),
+          labelPanel('#ffffff', '#111111'),
           recordToSymbolConnector(connectorHeight),
           $(go.Panel, 'Spot',
-            { width: 46, height: 46 },
+            { width: 34, height: 32 },
             artwork
           )
         ),
@@ -433,7 +453,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       contentAlignment: go.Spot.TopCenter,
       padding: 42,
       grid: $(go.Panel, 'Grid',
-        { gridCellSize: new go.Size(16, 16) },
+        { gridCellSize: new go.Size(16, 16), visible: false },
         $(go.Shape, 'LineH', { stroke: '#eef2f6', strokeWidth: 0.45 }),
         $(go.Shape, 'LineV', { stroke: '#eef2f6', strokeWidth: 0.45 })
       ),
@@ -441,8 +461,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       'undoManager.isEnabled': true,
       layout: $(go.TreeLayout, {
         angle: 90,
-        layerSpacing: 66,
-        nodeSpacing: 30,
+        layerSpacing: 38,
+        nodeSpacing: 16,
         alignment: go.TreeAlignment.CenterChildren,
         compaction: go.TreeCompaction.Block
       })
