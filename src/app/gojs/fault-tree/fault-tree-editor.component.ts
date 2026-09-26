@@ -528,8 +528,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         wrappingWidth: Number.POSITIVE_INFINITY,
         spacing: new go.Size(10, 0),
         cellSize: new go.Size(56, 46),
-        alignment: go.GridAlignment.Location,
-        comparer: null
+        alignment: go.GridAlignment.Location
       })
     });
 
