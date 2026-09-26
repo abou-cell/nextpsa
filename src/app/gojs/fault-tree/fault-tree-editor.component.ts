@@ -153,11 +153,7 @@ import {
       min-height: 470px;
       width: 100%;
       height: 100%;
-      background-color: #fff;
-      background-image:
-        linear-gradient(#eef2f6 1px, transparent 1px),
-        linear-gradient(90deg, #eef2f6 1px, transparent 1px);
-      background-size: 16px 16px;
+      background: #fff;
     }
 
     @media (max-width: 1180px) {
@@ -176,6 +172,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   @Input({ required: true }) model!: FaultTreeModel;
   @Output() readonly selectedNodeChange = new EventEmitter<FaultTreeNodeData | null>();
   @Output() readonly recordOpen = new EventEmitter<FaultTreeNodeData>();
+  @Output() readonly changeNodeEvent = new EventEmitter<FaultTreeNodeData>();
 
   private diagram?: go.Diagram;
   private palette?: go.Palette;
@@ -217,19 +214,20 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   }
 
   /**
-   * Visible input port used by every Fault Tree record.
-   * For Gate records this is paired with an OUT port at the bottom.
-   * Terminal records (BE / HE / Diamond / Transfer) only expose this IN port.
+   * RiskSpectrum does not draw visible connection handles. The ports remain
+   * available to GoJS for precise routing and hit-testing but are fully transparent.
    */
   private makeTopPort(): go.Shape {
     const $ = go.GraphObject.make;
-    return $(go.Shape, 'Circle', {
+    return $(go.Shape, 'Rectangle', {
       portId: 'IN',
-      desiredSize: new go.Size(7, 7),
-      fill: '#ffffff',
-      stroke: '#111827',
-      strokeWidth: 1.2,
-      alignment: new go.Spot(0.5, 0, 0, -3),
+      width: 12,
+      height: 8,
+      fill: 'transparent',
+      stroke: null,
+      opacity: 0,
+      alignment: go.Spot.Top,
+      alignmentFocus: go.Spot.Center,
       fromLinkable: false,
       toLinkable: true,
       toSpot: go.Spot.Top,
@@ -237,16 +235,18 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     });
   }
 
-  /** Visible Gate output port. */
+  /** Invisible logical output for Gate / Top Event nodes only. */
   private makeBottomPort(): go.Shape {
     const $ = go.GraphObject.make;
-    return $(go.Shape, 'Circle', {
+    return $(go.Shape, 'Rectangle', {
       portId: 'OUT',
-      desiredSize: new go.Size(7, 7),
-      fill: '#ffffff',
-      stroke: '#111827',
-      strokeWidth: 1.2,
-      alignment: new go.Spot(0.5, 1, 0, 0),
+      width: 12,
+      height: 8,
+      fill: 'transparent',
+      stroke: null,
+      opacity: 0,
+      alignment: go.Spot.Bottom,
+      alignmentFocus: go.Spot.Center,
       fromLinkable: true,
       toLinkable: false,
       fromSpot: go.Spot.Bottom,
