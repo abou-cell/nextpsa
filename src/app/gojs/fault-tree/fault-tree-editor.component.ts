@@ -408,30 +408,41 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     diagram.addDiagramListener('ViewportBoundsChanged', () => this.zone.run(() => this.updateZoomLabel()));
 
+    // When a symbol is dragged from the palette into the fault tree, automatically
+    // create the logical link FROM the nearest gate/top event ABOVE the drop
+    // TO the newly inserted component. No dangling/virtual branch is drawn before
+    // a child actually exists.
+    diagram.addDiagramListener('ExternalObjectsDropped', () => {
+      this.autoConnectDroppedNodes(diagram);
+    });
+
     this.diagram = diagram;
 
     /**
-     * Fixed 66x50 palette slots make every symbol occupy the same visual column.
-     * This intentionally mirrors the uniform RiskSpectrum symbol menu.
+     * Palette symbols are intentionally 25% smaller than the diagram symbols.
+     * RiskSpectrum uses a compact symbol catalogue; keeping a fixed slot also
+     * makes AND/OR/NOR/NAND/XOR/K-N/BE/House/Transfer visually uniform.
      */
-    const fixedSymbolSlot = (content: go.GraphObject) =>
-      $(go.Panel, 'Spot',
-        { width: 66, height: 50 },
+    const fixedSymbolSlot = (content: go.GraphObject) => {
+      content.scale = 0.75;
+      return $(go.Panel, 'Spot',
+        { width: 52, height: 40 },
         content
       );
+    };
 
     const paletteGateTemplate =
       $(go.Node, 'Horizontal',
         {
-          width: 210,
-          height: 52,
+          width: 202,
+          height: 42,
           selectionAdorned: true,
           cursor: 'grab'
         },
         fixedSymbolSlot(gateSymbolPanel()),
         $(go.TextBlock, {
-            width: 134,
-            font: '600 10px Inter, sans-serif',
+            width: 144,
+            font: '600 9.5px Inter, sans-serif',
             stroke: '#1f2937'
           },
           new go.Binding('text', 'id')
@@ -441,15 +452,15 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const paletteBasicTemplate =
       $(go.Node, 'Horizontal',
         {
-          width: 210,
-          height: 52,
+          width: 202,
+          height: 42,
           selectionAdorned: true,
           cursor: 'grab'
         },
         fixedSymbolSlot(basicEventSymbol()),
         $(go.TextBlock, {
-            width: 134,
-            font: '600 10px Inter, sans-serif',
+            width: 144,
+            font: '600 9.5px Inter, sans-serif',
             stroke: '#1f2937'
           },
           new go.Binding('text', 'id')
@@ -459,15 +470,15 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const paletteHouseTemplate =
       $(go.Node, 'Horizontal',
         {
-          width: 210,
-          height: 52,
+          width: 202,
+          height: 42,
           selectionAdorned: true,
           cursor: 'grab'
         },
         fixedSymbolSlot(houseEventSymbol()),
         $(go.TextBlock, {
-            width: 134,
-            font: '600 10px Inter, sans-serif',
+            width: 144,
+            font: '600 9.5px Inter, sans-serif',
             stroke: '#1f2937'
           },
           new go.Binding('text', 'id')
@@ -477,15 +488,15 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const paletteTransferTemplate =
       $(go.Node, 'Horizontal',
         {
-          width: 210,
-          height: 52,
+          width: 202,
+          height: 42,
           selectionAdorned: true,
           cursor: 'grab'
         },
         fixedSymbolSlot(transferSymbol()),
         $(go.TextBlock, {
-            width: 134,
-            font: '600 10px Inter, sans-serif',
+            width: 144,
+            font: '600 9.5px Inter, sans-serif',
             stroke: '#1f2937'
           },
           new go.Binding('text', 'id')
@@ -496,7 +507,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       layout: $(go.GridLayout, {
         wrappingColumn: 1,
         spacing: new go.Size(0, 0),
-        cellSize: new go.Size(210, 52)
+        cellSize: new go.Size(202, 42)
       })
     });
 
@@ -519,6 +530,110 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     ] as FaultTreeNodeData[]);
 
     this.palette = palette;
+  }
+
+  /**
+   * Connect newly dropped palette nodes as CHILDREN of the most plausible
+   * RiskSpectrum logic parent. The link direction is always:
+   *
+   *   parent gate/top event OUT  --->  child record IN
+   *
+   * This is intentionally not reversed: in a fault tree the branch leaves the
+   * gate and terminates on the child component/record.
+   */
+  private autoConnectDroppedNodes(diagram: go.Diagram): void {
+    const droppedNodes: go.Node[] = [];
+    diagram.selection.each((part) => {
+      if (part instanceof go.Node) droppedNodes.push(part);
+    });
+
+    if (!droppedNodes.length) return;
+
+    const droppedKeys = new Set(droppedNodes.map((node) => node.key));
+    const parentCandidates: go.Node[] = [];
+
+    diagram.nodes.each((node) => {
+      if (droppedKeys.has(node.key)) return;
+      const data = node.data as FaultTreeNodeData;
+      if (data.category === 'TOP_EVENT' || data.category === 'GATE') {
+        parentCandidates.push(node);
+      }
+    });
+
+    if (!parentCandidates.length) return;
+
+    const model = diagram.model as go.GraphLinksModel;
+    let createdLink = false;
+
+    diagram.startTransaction('Auto-connect dropped fault-tree component');
+
+    droppedNodes.forEach((child, index) => {
+      // Do not add a second parent if the copied object already arrived linked.
+      let alreadyConnected = false;
+      child.findLinksInto().each(() => {
+        alreadyConnected = true;
+      });
+      if (alreadyConnected) return;
+
+      const parent = this.findNearestFaultTreeParent(child, parentCandidates);
+      if (!parent) return;
+
+      const duplicate = model.linkDataArray.some((linkData) => {
+        const link = linkData as { from?: unknown; to?: unknown };
+        return link.from === parent.key && link.to === child.key;
+      });
+      if (duplicate) return;
+
+      model.addLinkData({
+        key: `AUTO-${String(parent.key)}-${String(child.key)}-${model.linkDataArray.length + index + 1}`,
+        from: parent.key,
+        to: child.key,
+        fromPort: 'OUT',
+        toPort: 'IN',
+        negated: false
+      });
+      createdLink = true;
+    });
+
+    diagram.commitTransaction('Auto-connect dropped fault-tree component');
+
+    if (createdLink) {
+      // Once linked, let the fault-tree layout place the new child cleanly
+      // beneath its parent branch.
+      diagram.layoutDiagram(true);
+    }
+  }
+
+  private findNearestFaultTreeParent(
+    child: go.Node,
+    candidates: readonly go.Node[]
+  ): go.Node | null {
+    const childCenter = child.actualBounds.center;
+    let best: go.Node | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    for (const candidate of candidates) {
+      const parentCenter = candidate.actualBounds.center;
+      const verticalDistance = childCenter.y - candidate.actualBounds.bottom;
+      const horizontalDistance = Math.abs(childCenter.x - parentCenter.x);
+
+      // The new record must be visually below its logical parent.
+      if (verticalDistance < -8) continue;
+
+      // Prevent accidental connection to a far-away gate in another branch.
+      if (horizontalDistance > 260 || verticalDistance > 300) continue;
+
+      // Horizontal alignment matters strongly in a fault tree: a component
+      // dropped below a gate should join that gate's branch.
+      const score = Math.max(0, verticalDistance) + horizontalDistance * 1.6;
+
+      if (score < bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    }
+
+    return best;
   }
 
   private applyModel(): void {
