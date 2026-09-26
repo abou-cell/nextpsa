@@ -65,7 +65,7 @@ import {
   styles: [`
     :host { display: block; height: 100%; min-height: 520px; }
     .ft-shell { height: 100%; background: #fff; }
-    .diagram-shell { min-width: 0; min-height: 0; height: 100%; display: grid; grid-template-rows: 42px 58px 1fr; }
+    .diagram-shell { min-width: 0; min-height: 0; height: 100%; display: grid; grid-template-rows: 42px 44px 1fr; }
     .diagram-toolbar { display: flex; align-items: center; gap: 10px; padding: 0 10px; border-bottom: 1px solid var(--nps-border); background: #fff; color: var(--nps-text-muted); font-size: 10px; }
     .toolbar-group { display: flex; align-items: center; gap: 5px; }
     .toolbar-group button { height: 28px; min-width: 30px; border: 1px solid var(--nps-border); border-radius: 6px; background: #fff; color: var(--nps-text); cursor: pointer; font-weight: 600; }
@@ -77,7 +77,7 @@ import {
     .symbol-toolbar { min-width: 0; display: grid; grid-template-columns: auto 1px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 5px 10px; border-bottom: 1px solid var(--nps-border); background: #fbfdff; }
     .symbol-toolbar-title { font-size: 10px; font-weight: 800; color: #334155; white-space: nowrap; letter-spacing: .01em; }
     .symbol-toolbar-divider { width: 1px; height: 28px; background: var(--nps-border); }
-    .palette-toolbar-canvas { width: 100%; height: 46px; min-width: 0; background: transparent; }
+    .palette-toolbar-canvas { width: 100%; height: 32px; min-width: 0; background: transparent; }
     .symbol-toolbar-help { color: #94a3b8; font-size: 9px; white-space: nowrap; }
     .diagram-canvas { min-height: 470px; width: 100%; height: 100%; background-color: #fff; background-image: linear-gradient(#eef2f6 1px, transparent 1px), linear-gradient(90deg, #eef2f6 1px, transparent 1px); background-size: 16px 16px; }
   `]
@@ -153,6 +153,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
             strokeWidth: 1.5
           },
           new go.Binding('geometryString', 'gateType', gateGeometry),
+          new go.Binding('strokeWidth', 'gateType', (type: FaultTreeNodeData['gateType']) =>
+            type === 'AND' || type === 'NAND' ? 1.9 : 1.5
+          ),
           new go.Binding('position', 'gateType', (type: FaultTreeNodeData['gateType']) =>
             new go.Point(0, hasOutputNegationBubble(type) ? 8 : 0)
           ),
@@ -422,7 +425,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
      */
     const reinforcePaletteStrokes = (object: go.GraphObject): void => {
       if (object instanceof go.Shape && object.stroke) {
-        object.strokeWidth = Math.max(2.0, object.strokeWidth * 1.65);
+        // The palette is intentionally tiny, so compensate before scaling.
+        object.strokeWidth = Math.max(5.2, object.strokeWidth * 3.5);
       }
       if (object instanceof go.Panel) {
         object.elements.each((child) => reinforcePaletteStrokes(child));
@@ -431,12 +435,13 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     const fixedSymbolSlot = (content: go.GraphObject) => {
       reinforcePaletteStrokes(content);
-      // Requested refinement: render palette symbols at 50% of the previous size.
-      content.scale = 0.41;
+      // Requested refinement: another 50% reduction from the previous palette.
+      // 0.41 -> 0.205, while reinforced strokes keep the icons crisp.
+      content.scale = 0.205;
       return $(go.Panel, 'Spot',
         {
-          width: 48,
-          height: 42,
+          width: 30,
+          height: 28,
           alignment: go.Spot.Center
         },
         content
@@ -464,8 +469,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const paletteGateTemplate =
       $(go.Node, 'Spot',
         {
-          width: 52,
-          height: 44,
+          width: 34,
+          height: 30,
           selectionAdorned: true,
           cursor: 'grab',
           toolTip: paletteToolTip()
@@ -476,8 +481,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const paletteBasicTemplate =
       $(go.Node, 'Spot',
         {
-          width: 52,
-          height: 44,
+          width: 34,
+          height: 30,
           selectionAdorned: true,
           cursor: 'grab',
           toolTip: paletteToolTip()
@@ -488,8 +493,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const paletteHouseTemplate =
       $(go.Node, 'Spot',
         {
-          width: 52,
-          height: 44,
+          width: 34,
+          height: 30,
           selectionAdorned: true,
           cursor: 'grab',
           toolTip: paletteToolTip()
@@ -500,8 +505,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const paletteTransferTemplate =
       $(go.Node, 'Spot',
         {
-          width: 52,
-          height: 44,
+          width: 34,
+          height: 30,
           selectionAdorned: true,
           cursor: 'grab',
           toolTip: paletteToolTip()
@@ -517,8 +522,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       layout: $(go.GridLayout, {
         wrappingColumn: 10,
         wrappingWidth: Number.POSITIVE_INFINITY,
-        spacing: new go.Size(7, 0),
-        cellSize: new go.Size(52, 44),
+        spacing: new go.Size(8, 0),
+        cellSize: new go.Size(34, 30),
         alignment: go.GridAlignment.Position
       })
     });
