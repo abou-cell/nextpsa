@@ -3,25 +3,25 @@ import { GateType } from '../../core/models/psa.models';
 /**
  * Original GoJS vector equivalents of the RiskSpectrum fault-tree symbol family.
  *
- * Coordinate conventions:
- * - every logic gate is symmetric around x = 30
- * - normal gate output is exactly at (30, 0)
- * - normal gate input base terminates at y = 40
- * - NAND/NOR add an inversion bubble above the same gate geometry
- * - K/N is a compact rectangular voting symbol
+ * Design constraints:
+ * - all logic gates are strictly symmetric around x = 30
+ * - the visible symbol is centered inside a fixed 60 px viewport
+ * - NAND/NOR inversion bubbles sit ABOVE the gate body
+ * - K/N uses a compact rectangular voting-gate symbol
+ * - OR/XOR input-side curves use a symmetric lower arc
  *
- * Keeping the top and bottom boundaries exact is important because the parent/child
- * link is routed from the node bounds. This avoids the visible gaps that existed in V1.
+ * The editor uses explicit named ports for links; geometry and port positions
+ * are intentionally kept independent so a link can touch the exact visual symbol.
  */
 const AND_GEOMETRY =
   'F M6 40 L6 22 C6 9 16 0 30 0 C44 0 54 9 54 22 L54 40 Z';
 
 const OR_GEOMETRY =
-  'F M5 40 C8 20 15 5 30 0 C45 5 52 20 55 40 C43 33 17 33 5 40 Z';
+  'F M4 40 Q8 9 30 0 Q52 9 56 40 Q30 29 4 40 Z';
 
 const XOR_GEOMETRY =
-  'F M7 38 C10 19 17 5 30 0 C43 5 50 19 53 38 C42 32 18 32 7 38 Z ' +
-  'M4 42 C17 34 43 34 56 42';
+  'F M4 40 Q8 9 30 0 Q52 9 56 40 Q30 29 4 40 Z ' +
+  'M4 46 Q30 34 56 46';
 
 export function gateGeometry(type: GateType | undefined): string {
   switch (type) {
@@ -51,16 +51,47 @@ export function gateCaption(type: GateType | undefined, k?: number): string {
   return type ?? 'UNDEFINED';
 }
 
+/**
+ * Total viewport height used by the symbol panel.
+ * These values include the extra inversion bubble or XOR secondary curve.
+ */
 export function gateSymbolHeight(type: GateType | undefined): number {
-  if (type === 'KOFN') return 24;
-  if (hasOutputNegationBubble(type)) return 48;
-  return type === 'XOR' ? 42 : 40;
+  if (type === 'KOFN') return 28;
+  if (type === 'NAND' || type === 'NOR') return 48;
+  if (type === 'XOR') return 47;
+  return 40;
+}
+
+/**
+ * Y coordinate of the exact logical branch/output port measured in the 60 px
+ * symbol viewport. This is where the child branch link starts visually.
+ *
+ * RiskSpectrum OR/NOR/XOR gates have a concave input-side curve; therefore the
+ * link must start at that curve, not at the rectangular GraphObject bounds.
+ */
+export function gateOutputPortY(type: GateType | undefined): number {
+  switch (type) {
+    case 'AND':
+      return 40;
+    case 'NAND':
+      return 48;
+    case 'OR':
+      return 30;
+    case 'NOR':
+      return 38;
+    case 'XOR':
+      return 44;
+    case 'KOFN':
+      return 28;
+    default:
+      return 30;
+  }
 }
 
 /** House Event: closed, symmetric house / pentagon. */
 export const HOUSE_EVENT_GEOMETRY =
   'F M22 0 L42 15 L42 38 L2 38 L2 15 Z';
 
-/** Transfer: closed, symmetric triangle as requested for NextPSA. */
+/** Transfer: closed, symmetric triangle. */
 export const TRANSFER_GEOMETRY =
   'F M22 0 L42 38 L2 38 Z';
