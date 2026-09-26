@@ -435,13 +435,13 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     const fixedSymbolSlot = (content: go.GraphObject) => {
       reinforcePaletteStrokes(content);
-      // Requested refinement: another 50% reduction from the previous palette.
-      // 0.41 -> 0.205, while reinforced strokes keep the icons crisp.
-      content.scale = 0.205;
+      // Requested refinement: increase the current compact palette icons by 50%.
+      // 0.205 -> 0.3075.
+      content.scale = 0.3075;
       return $(go.Panel, 'Spot',
         {
-          width: 30,
-          height: 28,
+          width: 38,
+          height: 34,
           alignment: go.Spot.Center
         },
         content
@@ -469,8 +469,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const paletteGateTemplate =
       $(go.Node, 'Spot',
         {
-          width: 34,
-          height: 30,
+          width: 42,
+          height: 36,
           selectionAdorned: true,
           cursor: 'grab',
           toolTip: paletteToolTip()
@@ -481,8 +481,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const paletteBasicTemplate =
       $(go.Node, 'Spot',
         {
-          width: 34,
-          height: 30,
+          width: 42,
+          height: 36,
           selectionAdorned: true,
           cursor: 'grab',
           toolTip: paletteToolTip()
@@ -493,8 +493,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const paletteHouseTemplate =
       $(go.Node, 'Spot',
         {
-          width: 34,
-          height: 30,
+          width: 42,
+          height: 36,
           selectionAdorned: true,
           cursor: 'grab',
           toolTip: paletteToolTip()
@@ -505,8 +505,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const paletteTransferTemplate =
       $(go.Node, 'Spot',
         {
-          width: 34,
-          height: 30,
+          width: 42,
+          height: 36,
           selectionAdorned: true,
           cursor: 'grab',
           toolTip: paletteToolTip()
@@ -523,7 +523,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         wrappingColumn: 10,
         wrappingWidth: Number.POSITIVE_INFINITY,
         spacing: new go.Size(8, 0),
-        cellSize: new go.Size(34, 30),
+        cellSize: new go.Size(42, 36),
         alignment: go.GridAlignment.Position
       })
     });
