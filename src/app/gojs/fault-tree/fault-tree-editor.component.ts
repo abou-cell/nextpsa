@@ -187,7 +187,9 @@ class RiskSpectrumBranchLink extends go.Link {
           </div>
 
           <div class="palette-toolbar-right">
-            <span>Select a Gate, then click a symbol</span>
+            <span [class.armed-parent]="!!insertionParentId">
+              {{ insertionParentId ? ('Parent: ' + insertionParentId + ' → click a symbol') : 'Select a Gate, then click a symbol' }}
+            </span>
           </div>
         </div>
 
@@ -271,6 +273,10 @@ class RiskSpectrumBranchLink extends go.Link {
       color: #64748b;
       white-space: nowrap;
     }
+    .palette-toolbar-right .armed-parent {
+      color: #0f5bd8;
+      font-weight: 700;
+    }
 
     .diagram-canvas {
       min-height: 470px;
@@ -300,6 +306,12 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private diagram?: go.Diagram;
   private palette?: go.Palette;
   private insertionSerial = 0;
+
+  // The logical father selected in the FT canvas. This survives focus changes
+  // when the user clicks the separate GoJS Palette diagram.
+  private insertionParentKey: go.Key | null = null;
+  insertionParentId: string | null = null;
+
   zoomPercent = 100;
 
   constructor(private readonly zone: NgZone) {}
@@ -531,7 +543,28 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       movable: false,
       selectionChanged: (node) => {
         const data = node.isSelected ? node.data as FaultTreeNodeData : null;
-        this.zone.run(() => this.selectedNodeChange.emit(data));
+
+        this.zone.run(() => {
+          this.selectedNodeChange.emit(data);
+
+          if (!data) {
+            if (this.insertionParentKey === node.key) {
+              this.insertionParentKey = null;
+              this.insertionParentId = null;
+            }
+            return;
+          }
+
+          if (data.category === 'TOP_EVENT' || data.category === 'GATE') {
+            this.insertionParentKey = node.key;
+            this.insertionParentId = data.id;
+          } else {
+            // Clicking a terminal event cancels the armed father. A palette click
+            // must never attach a new child to BE / HE / Diamond / Transfer.
+            this.insertionParentKey = null;
+            this.insertionParentId = null;
+          }
+        });
       },
       doubleClick: (_event, node) => {
         this.zone.run(() => this.recordOpen.emit((node as go.Node).data as FaultTreeNodeData));
@@ -893,22 +926,26 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     diagram: go.Diagram,
     paletteData: FaultTreeNodeData
   ): void {
-    const selectedPart = diagram.selection.first();
+    if (this.insertionParentKey === null) return;
 
-    if (!(selectedPart instanceof go.Node)) return;
+    const parent = diagram.findNodeForKey(this.insertionParentKey);
+    if (!parent) {
+      this.insertionParentKey = null;
+      this.insertionParentId = null;
+      return;
+    }
 
-    const selectedData = selectedPart.data as FaultTreeNodeData;
+    const selectedData = parent.data as FaultTreeNodeData;
 
-    // A terminal event cannot become a logical father. If no Gate/Top Event is
-    // selected, a palette click is intentionally a no-op.
+    // Only Gate / Top Event may act as the logical father.
     if (
       selectedData.category !== 'TOP_EVENT' &&
       selectedData.category !== 'GATE'
     ) {
+      this.insertionParentKey = null;
+      this.insertionParentId = null;
       return;
     }
-
-    const parent = selectedPart;
 
     const serial = ++this.insertionSerial;
     const prefix = this.paletteNodePrefix(paletteData);
@@ -950,7 +987,12 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     // Keep the logical father selected so the user can add several children
     // by clicking multiple palette symbols in succession.
     const refreshedParent = diagram.findNodeForKey(parent.key);
-    if (refreshedParent) diagram.select(refreshedParent);
+    if (refreshedParent) {
+      diagram.select(refreshedParent);
+      const refreshedData = refreshedParent.data as FaultTreeNodeData;
+      this.insertionParentKey = refreshedParent.key;
+      this.insertionParentId = refreshedData.id;
+    }
   }
 
   private paletteNodePrefix(node: FaultTreeNodeData): string {
@@ -1185,6 +1227,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
   private applyModel(): void {
     if (!this.diagram || !this.model) return;
+
+    this.insertionParentKey = null;
+    this.insertionParentId = null;
 
     const model = new go.GraphLinksModel(
       this.model.nodes.map((node) => ({
