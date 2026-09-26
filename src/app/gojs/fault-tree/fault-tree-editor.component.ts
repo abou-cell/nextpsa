@@ -19,6 +19,7 @@ import {
 import {
   gateCaption,
   gateGeometry,
+  gateOutputPortY,
   gateSymbolHeight,
   hasOutputNegationBubble,
   HOUSE_EVENT_GEOMETRY,
@@ -194,12 +195,32 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           },
           new go.Binding('text', '', (data: FaultTreeNodeData) => gateCaption(data.gateType, data.k)),
           new go.Binding('visible', 'gateType', isKofNGate)
+        ),
+        // Exact branch origin. Using a named port removes the visual gap between
+        // the gate curve and the orthogonal child branch.
+        $(go.Shape, 'Circle', {
+            portId: 'OUT',
+            fromLinkable: true,
+            fromSpot: go.Spot.Bottom,
+            width: 2,
+            height: 2,
+            fill: null,
+            stroke: null
+          },
+          new go.Binding('position', 'gateType', (type: FaultTreeNodeData['gateType']) =>
+            new go.Point(29, gateOutputPortY(type) - 1)
+          )
         )
       );
 
     const labelPanel = (fill = '#f2f2f2', stroke = '#777777') =>
       $(go.Panel, 'Auto',
-        { name: 'LABEL' },
+        {
+          name: 'LABEL',
+          portId: 'IN',
+          toLinkable: true,
+          toSpot: go.Spot.Top
+        },
         $(go.Shape, 'RoundedRectangle', {
           fill,
           stroke,
@@ -233,29 +254,24 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       });
 
     const basicEventSymbol = () =>
-      $(go.Panel, 'Position',
-        { width: 32, height: 32 },
-        $(go.Shape, 'Circle', {
-            position: new go.Point(0, 0),
+      $(go.Panel, 'Spot',
+        { width: 40, height: 40 },
+        $(go.Shape, {
             width: 32,
             height: 32,
             fill: '#ffffff',
             stroke: '#111827',
-            strokeWidth: 1.25,
-            visible: true
+            strokeWidth: 1.25
           },
-          new go.Binding('visible', 'symbol', (symbol: FaultTreeNodeData['symbol']) => symbol !== 'DIAMOND')
-        ),
-        $(go.Shape, 'Diamond', {
-            position: new go.Point(2, 2),
-            width: 28,
-            height: 28,
-            fill: '#ffffff',
-            stroke: '#111827',
-            strokeWidth: 1.2,
-            visible: false
-          },
-          new go.Binding('visible', 'symbol', (symbol: FaultTreeNodeData['symbol']) => symbol === 'DIAMOND')
+          new go.Binding('figure', 'symbol', (symbol: FaultTreeNodeData['symbol']) =>
+            symbol === 'DIAMOND' ? 'Diamond' : 'Circle'
+          ),
+          new go.Binding('width', 'symbol', (symbol: FaultTreeNodeData['symbol']) =>
+            symbol === 'DIAMOND' ? 28 : 32
+          ),
+          new go.Binding('height', 'symbol', (symbol: FaultTreeNodeData['symbol']) =>
+            symbol === 'DIAMOND' ? 28 : 32
+          )
         )
       );
 
@@ -283,8 +299,6 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     const baseNodeProperties: Partial<go.Node> = {
       selectionAdorned: true,
-      fromSpot: go.Spot.Bottom,
-      toSpot: go.Spot.Top,
       selectionChanged: (node) => {
         const data = node.isSelected ? node.data as FaultTreeNodeData : null;
         this.zone.run(() => this.selectedNodeChange.emit(data));
@@ -375,8 +389,6 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           routing: go.Routing.Orthogonal,
           corner: 0,
           selectable: true,
-          fromSpot: go.Spot.Bottom,
-          toSpot: go.Spot.Top,
           adjusting: go.LinkAdjusting.End
         },
         $(go.Shape, { stroke: '#374151', strokeWidth: 1.2 }),
@@ -513,12 +525,18 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     if (!this.diagram || !this.model) return;
     const model = new go.GraphLinksModel(
       this.model.nodes.map((node) => ({
-        symbol: node.category === 'BASIC_EVENT' ? (node.symbol ?? 'CIRCLE') : node.symbol,
-        ...node
+        ...node,
+        symbol: node.category === 'BASIC_EVENT' ? (node.symbol ?? 'CIRCLE') : node.symbol
       })),
-      this.model.links.map((link) => ({ ...link }))
+      this.model.links.map((link) => ({
+        ...link,
+        fromPort: 'OUT',
+        toPort: 'IN'
+      }))
     );
     model.linkKeyProperty = 'key';
+    model.linkFromPortIdProperty = 'fromPort';
+    model.linkToPortIdProperty = 'toPort';
     this.diagram.model = model;
     this.diagram.layoutDiagram(true);
   }
