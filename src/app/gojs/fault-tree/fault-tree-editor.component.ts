@@ -567,7 +567,11 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         baseNodeProperties,
         {
           selectionObjectName: 'LABEL',
-          contextMenu: gateContextMenu()
+          contextMenu: gateContextMenu(),
+          movable: !topEvent,
+          copyable: !topEvent,
+          deletable: !topEvent,
+          cursor: topEvent ? 'default' : 'move'
         },
         $(go.Panel, 'Vertical',
           labelPanel(topEvent ? '#d0d0d0' : '#ffffff', '#111111'),
