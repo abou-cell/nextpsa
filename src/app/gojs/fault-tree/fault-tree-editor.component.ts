@@ -262,7 +262,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
   /**
    * RiskSpectrum does not draw visible connection handles. The ports remain
-   * available to GoJS for precise routing and hit-testing but are fully transparent.
+   * available to GoJS only as logical attachment points for routing/hit-testing.
+   * They are rectangular, fully transparent and never rendered as circles.
    */
   private makeTopPort(): go.Shape {
     const $ = go.GraphObject.make;
@@ -282,7 +283,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     });
   }
 
-  /** Invisible logical output for Gate / Top Event nodes only. */
+  /**
+   * Invisible logical output for Gate / Top Event nodes only.
+   * BE / HE / Diamond / Transfer intentionally never receive an OUT port.
+   */
   private makeBottomPort(): go.Shape {
     const $ = go.GraphObject.make;
     return $(go.Shape, 'Rectangle', {
@@ -353,15 +357,6 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           }, new go.Binding('text', 'id'))
         )
       );
-
-    const recordToSymbolConnector = (height = 4) =>
-      $(go.Shape, 'LineV', {
-        width: 1,
-        height,
-        stroke: '#111111',
-        strokeWidth: 1,
-        margin: 0
-      });
 
     /**
      * RiskSpectrum-style Gate artwork.
@@ -576,15 +571,13 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         },
         $(go.Panel, 'Vertical',
           labelPanel(topEvent ? '#d0d0d0' : '#ffffff', '#111111'),
-          recordToSymbolConnector(4),
           gateArtwork(gateType, true)
         ),
         this.makeTopPort()
       );
 
     const makeTerminalNodeTemplate = (
-      artwork: go.GraphObject,
-      connectorHeight = 4
+      artwork: go.GraphObject
     ) =>
       $(go.Node, 'Spot',
         baseNodeProperties,
@@ -594,7 +587,6 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         },
         $(go.Panel, 'Vertical',
           labelPanel('#ffffff', '#111111'),
-          recordToSymbolConnector(connectorHeight),
           $(go.Panel, 'Spot',
             { width: 34, height: 32 },
             artwork
