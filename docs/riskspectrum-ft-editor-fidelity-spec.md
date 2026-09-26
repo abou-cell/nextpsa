@@ -148,3 +148,37 @@ In GoJS this is implemented with a dedicated `RiskSpectrumBranchLink.computePoin
 - explicit port spots retained.
 
 The parent is intentionally aligned with the first/leftmost child, matching the supplied RiskSpectrum examples. Additional children extend to the right while the branch datum remains stable.
+
+
+## Invisible logical attachment points
+
+The GoJS connection ports are logical attachment locations only. They are not graphical symbols.
+
+Rules:
+
+- Gate / Top Event: one invisible `IN` port at the top of the record and one invisible `OUT` port at the bottom of the Gate symbol.
+- Basic Event: one invisible `IN` port only.
+- House Event: one invisible `IN` port only.
+- Undeveloped (Diamond) Event: one invisible `IN` port only.
+- Transfer: one invisible `IN` port only.
+- No terminal event receives an `OUT` port.
+- No port is rendered as a circle, dot, handle or marker.
+- NAND/NOR inversion bubbles remain part of the gate symbol itself; they are not connection ports.
+
+The visual connector previously drawn between the record box and the Gate/BE/HE/Diamond/Transfer symbol has been removed. The record box and its symbol remain a single GoJS Node, but there is no decorative vertical stroke between them.
+
+The logical link still attaches through the invisible ports:
+
+```
+Gate / Top Event:
+IN (invisible)
+record box
+gate symbol
+OUT (invisible)
+
+Terminal event:
+IN (invisible)
+record box
+event symbol
+(no OUT)
+```
