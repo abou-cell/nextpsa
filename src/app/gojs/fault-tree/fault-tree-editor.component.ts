@@ -19,6 +19,7 @@ import {
 import {
   gateCaption,
   gateGeometry,
+  gateSymbolHeight,
   hasOutputNegationBubble,
   HOUSE_EVENT_GEOMETRY,
   isKofNGate,
@@ -135,48 +136,64 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private initializeDiagram(): void {
     const $ = go.GraphObject.make;
 
+    /**
+     * The symbol panel has no decorative padding:
+     * its top is the exact logical output point and its bottom is the exact input base.
+     * Therefore the vertical record-to-gate line and the GoJS branch link visibly touch.
+     */
     const gateSymbolPanel = () =>
-      $(go.Panel, 'Spot',
-        { desiredSize: new go.Size(64, 48) },
+      $(go.Panel, 'Position',
+        {
+          width: 60
+        },
+        new go.Binding('height', 'gateType', gateSymbolHeight),
         $(go.Shape, {
-            width: 56,
-            height: 38,
-            alignment: new go.Spot(0.5, 0.62),
+            position: new go.Point(0, 0),
+            width: 60,
+            height: 40,
             stretch: go.Stretch.Fill,
             fill: '#ffffff',
             stroke: '#111827',
-            strokeWidth: 1.35
+            strokeWidth: 1.25
           },
           new go.Binding('geometryString', 'gateType', gateGeometry),
+          new go.Binding('position', 'gateType', (type: FaultTreeNodeData['gateType']) =>
+            new go.Point(0, hasOutputNegationBubble(type) ? 8 : 0)
+          ),
           new go.Binding('visible', 'gateType', (type: FaultTreeNodeData['gateType']) => !isKofNGate(type))
         ),
-        $(go.Shape, 'Rectangle', {
-            width: 40,
-            height: 24,
-            alignment: new go.Spot(0.5, 0.62),
+        $(go.Shape, 'Circle', {
+            position: new go.Point(26, 0),
+            width: 8,
+            height: 8,
             fill: '#ffffff',
             stroke: '#111827',
-            strokeWidth: 1.2
+            strokeWidth: 1.15,
+            visible: false
+          },
+          new go.Binding('visible', 'gateType', hasOutputNegationBubble)
+        ),
+        $(go.Shape, 'Rectangle', {
+            position: new go.Point(10, 0),
+            width: 40,
+            height: 24,
+            fill: '#ffffff',
+            stroke: '#111827',
+            strokeWidth: 1.15,
+            visible: false
           },
           new go.Binding('visible', 'gateType', isKofNGate)
         ),
         $(go.TextBlock, {
-            alignment: new go.Spot(0.5, 0.62),
+            position: new go.Point(16, 6),
+            width: 28,
+            textAlign: 'center',
             font: '700 9px Inter, sans-serif',
-            stroke: '#111827'
+            stroke: '#111827',
+            visible: false
           },
           new go.Binding('text', '', (data: FaultTreeNodeData) => gateCaption(data.gateType, data.k)),
           new go.Binding('visible', 'gateType', isKofNGate)
-        ),
-        $(go.Shape, 'Circle', {
-            width: 8,
-            height: 8,
-            alignment: new go.Spot(0.5, 0, 0, 3),
-            fill: '#ffffff',
-            stroke: '#111827',
-            strokeWidth: 1.2
-          },
-          new go.Binding('visible', 'gateType', hasOutputNegationBubble)
         )
       );
 
@@ -206,24 +223,37 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         )
       );
 
+    const recordToSymbolConnector = (height = 7) =>
+      $(go.Shape, 'LineV', {
+        width: 1,
+        height,
+        stroke: '#374151',
+        strokeWidth: 1.15,
+        margin: 0
+      });
+
     const basicEventSymbol = () =>
-      $(go.Panel, 'Spot',
-        { desiredSize: new go.Size(40, 40) },
+      $(go.Panel, 'Position',
+        { width: 32, height: 32 },
         $(go.Shape, 'Circle', {
-            width: 31,
-            height: 31,
+            position: new go.Point(0, 0),
+            width: 32,
+            height: 32,
             fill: '#ffffff',
             stroke: '#111827',
-            strokeWidth: 1.35
+            strokeWidth: 1.25,
+            visible: true
           },
           new go.Binding('visible', 'symbol', (symbol: FaultTreeNodeData['symbol']) => symbol !== 'DIAMOND')
         ),
         $(go.Shape, 'Diamond', {
+            position: new go.Point(2, 2),
             width: 28,
             height: 28,
             fill: '#ffffff',
             stroke: '#111827',
-            strokeWidth: 1.25
+            strokeWidth: 1.2,
+            visible: false
           },
           new go.Binding('visible', 'symbol', (symbol: FaultTreeNodeData['symbol']) => symbol === 'DIAMOND')
         )
@@ -232,27 +262,29 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const houseEventSymbol = () =>
       $(go.Shape, {
         geometryString: HOUSE_EVENT_GEOMETRY,
-        width: 34,
+        width: 38,
         height: 34,
         stretch: go.Stretch.Fill,
         fill: '#ffffff',
         stroke: '#111827',
-        strokeWidth: 1.25
+        strokeWidth: 1.2
       });
 
     const transferSymbol = () =>
       $(go.Shape, {
         geometryString: TRANSFER_GEOMETRY,
-        width: 34,
+        width: 38,
         height: 34,
         stretch: go.Stretch.Fill,
-        fill: null,
-        stroke: '#5b6472',
-        strokeWidth: 1.25
+        fill: '#ffffff',
+        stroke: '#111827',
+        strokeWidth: 1.2
       });
 
     const baseNodeProperties: Partial<go.Node> = {
       selectionAdorned: true,
+      fromSpot: go.Spot.Bottom,
+      toSpot: go.Spot.Top,
       selectionChanged: (node) => {
         const data = node.isSelected ? node.data as FaultTreeNodeData : null;
         this.zone.run(() => this.selectedNodeChange.emit(data));
@@ -267,7 +299,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         baseNodeProperties,
         { selectionObjectName: 'LABEL' },
         labelPanel('#cfcfcf', '#5f5f5f'),
-        $(go.Shape, { height: 12, width: 1, stroke: '#4b5563', strokeWidth: 1.2 }),
+        recordToSymbolConnector(7),
         gateSymbolPanel()
       );
 
@@ -276,7 +308,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         baseNodeProperties,
         { selectionObjectName: 'LABEL' },
         labelPanel(),
-        $(go.Shape, { height: 11, width: 1, stroke: '#4b5563', strokeWidth: 1.1 }),
+        recordToSymbolConnector(7),
         gateSymbolPanel()
       );
 
@@ -285,7 +317,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         baseNodeProperties,
         { selectionObjectName: 'LABEL' },
         labelPanel('#f6f6f6', '#888888'),
-        $(go.Shape, { height: 8, width: 1, stroke: '#4b5563', strokeWidth: 1 }),
+        recordToSymbolConnector(6),
         basicEventSymbol()
       );
 
@@ -294,7 +326,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         baseNodeProperties,
         { selectionObjectName: 'LABEL' },
         labelPanel('#f6f6f6', '#888888'),
-        $(go.Shape, { height: 8, width: 1, stroke: '#4b5563', strokeWidth: 1 }),
+        recordToSymbolConnector(6),
         houseEventSymbol()
       );
 
@@ -303,7 +335,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         baseNodeProperties,
         { selectionObjectName: 'LABEL' },
         labelPanel('#f6f6f6', '#888888'),
-        $(go.Shape, { height: 7, width: 1, stroke: '#4b5563', strokeWidth: 1 }),
+        recordToSymbolConnector(6),
         transferSymbol()
       );
 
@@ -321,7 +353,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       'undoManager.isEnabled': true,
       layout: $(go.TreeLayout, {
         angle: 90,
-        layerSpacing: 74,
+        layerSpacing: 66,
         nodeSpacing: 30,
         alignment: go.TreeAlignment.CenterChildren,
         compaction: go.TreeCompaction.Block
@@ -344,9 +376,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           corner: 0,
           selectable: true,
           fromSpot: go.Spot.Bottom,
-          toSpot: go.Spot.Top
+          toSpot: go.Spot.Top,
+          adjusting: go.LinkAdjusting.End
         },
-        $(go.Shape, { stroke: '#374151', strokeWidth: 1.25 }),
+        $(go.Shape, { stroke: '#374151', strokeWidth: 1.2 }),
         $(go.Shape, {
             segmentIndex: -1,
             segmentFraction: 0.87,
@@ -355,7 +388,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
             figure: 'Circle',
             fill: '#ffffff',
             stroke: '#111827',
-            strokeWidth: 1.2
+            strokeWidth: 1.15
           },
           new go.Binding('visible', 'negated', Boolean)
         )
@@ -365,18 +398,27 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     this.diagram = diagram;
 
+    /**
+     * Fixed 66x50 palette slots make every symbol occupy the same visual column.
+     * This intentionally mirrors the uniform RiskSpectrum symbol menu.
+     */
+    const fixedSymbolSlot = (content: go.GraphObject) =>
+      $(go.Panel, 'Spot',
+        { width: 66, height: 50 },
+        content
+      );
+
     const paletteGateTemplate =
       $(go.Node, 'Horizontal',
         {
-          width: 202,
-          height: 48,
+          width: 210,
+          height: 52,
           selectionAdorned: true,
           cursor: 'grab'
         },
-        gateSymbolPanel(),
+        fixedSymbolSlot(gateSymbolPanel()),
         $(go.TextBlock, {
-            margin: new go.Margin(0, 0, 0, 8),
-            width: 122,
+            width: 134,
             font: '600 10px Inter, sans-serif',
             stroke: '#1f2937'
           },
@@ -387,15 +429,14 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const paletteBasicTemplate =
       $(go.Node, 'Horizontal',
         {
-          width: 202,
-          height: 48,
+          width: 210,
+          height: 52,
           selectionAdorned: true,
           cursor: 'grab'
         },
-        basicEventSymbol(),
+        fixedSymbolSlot(basicEventSymbol()),
         $(go.TextBlock, {
-            margin: new go.Margin(0, 0, 0, 20),
-            width: 122,
+            width: 134,
             font: '600 10px Inter, sans-serif',
             stroke: '#1f2937'
           },
@@ -406,15 +447,14 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const paletteHouseTemplate =
       $(go.Node, 'Horizontal',
         {
-          width: 202,
-          height: 48,
+          width: 210,
+          height: 52,
           selectionAdorned: true,
           cursor: 'grab'
         },
-        $(go.Panel, 'Spot', { width: 64, height: 44 }, houseEventSymbol()),
+        fixedSymbolSlot(houseEventSymbol()),
         $(go.TextBlock, {
-            margin: new go.Margin(0, 0, 0, 0),
-            width: 122,
+            width: 134,
             font: '600 10px Inter, sans-serif',
             stroke: '#1f2937'
           },
@@ -425,15 +465,14 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const paletteTransferTemplate =
       $(go.Node, 'Horizontal',
         {
-          width: 202,
-          height: 48,
+          width: 210,
+          height: 52,
           selectionAdorned: true,
           cursor: 'grab'
         },
-        $(go.Panel, 'Spot', { width: 64, height: 44 }, transferSymbol()),
+        fixedSymbolSlot(transferSymbol()),
         $(go.TextBlock, {
-            margin: new go.Margin(0, 0, 0, 0),
-            width: 122,
+            width: 134,
             font: '600 10px Inter, sans-serif',
             stroke: '#1f2937'
           },
@@ -444,7 +483,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const palette = $(go.Palette, this.paletteDiv.nativeElement, {
       layout: $(go.GridLayout, {
         wrappingColumn: 1,
-        spacing: new go.Size(0, 1)
+        spacing: new go.Size(0, 0),
+        cellSize: new go.Size(210, 52)
       })
     });
 
@@ -454,8 +494,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     palette.nodeTemplateMap.add('TRANSFER', paletteTransferTemplate);
 
     palette.model = new go.GraphLinksModel([
-      { key: 'palette-or', category: 'GATE', id: 'OR gate', description: 'At least one input TRUE', gateType: 'OR', state: 'NORMAL', recordType: 'GAT' },
       { key: 'palette-and', category: 'GATE', id: 'AND gate', description: 'All inputs TRUE', gateType: 'AND', state: 'NORMAL', recordType: 'GAT' },
+      { key: 'palette-or', category: 'GATE', id: 'OR gate', description: 'At least one input TRUE', gateType: 'OR', state: 'NORMAL', recordType: 'GAT' },
       { key: 'palette-nand', category: 'GATE', id: 'NAND (NOT AND)', description: 'Negated AND', gateType: 'NAND', state: 'NORMAL', recordType: 'GAT' },
       { key: 'palette-nor', category: 'GATE', id: 'NOR (NOT OR)', description: 'Negated OR', gateType: 'NOR', state: 'NORMAL', recordType: 'GAT' },
       { key: 'palette-xor', category: 'GATE', id: 'XOR gate', description: 'Exactly one input TRUE', gateType: 'XOR', state: 'NORMAL', recordType: 'GAT' },
@@ -472,7 +512,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private applyModel(): void {
     if (!this.diagram || !this.model) return;
     const model = new go.GraphLinksModel(
-      this.model.nodes.map((node) => ({ ...node })),
+      this.model.nodes.map((node) => ({
+        symbol: node.category === 'BASIC_EVENT' ? (node.symbol ?? 'CIRCLE') : node.symbol,
+        ...node
+      })),
       this.model.links.map((link) => ({ ...link }))
     );
     model.linkKeyProperty = 'key';
