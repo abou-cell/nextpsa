@@ -105,3 +105,46 @@ Current NextPSA implementation:
 - Use `Orthogonal` links with no arrowheads.
 - Keep the grid hidden by default for RiskSpectrum visual fidelity.
 - Use the horizontal NextPSA palette for modern UX, but reuse exactly the same symbol geometry.
+
+
+## Fixed branch rail geometry
+
+The supplied RiskSpectrum screenshots show a stable local routing pattern for every Gate branch.
+
+Measured on the reference screenshot used for the `Change Node Event` example:
+
+- parent symbol output -> horizontal rail: approximately **22 px** vertically;
+- horizontal rail -> top edge of every direct child record box: approximately **6 px**;
+- total parent/child inter-layer space: approximately **28 px**;
+- neighbouring record boxes on the same row: approximately **5-8 px** apart depending on screenshot zoom.
+
+Implementation rule:
+
+```
+parent gate output
+        |
+        | 22 px
+        |
+--------+------------------------------ shared branch rail
+        | 6 px              | 6 px
+     child A              child B
+```
+
+All direct inputs of one Gate MUST therefore:
+
+1. share the same local Y coordinate for their record-box top edges;
+2. share the same horizontal branch rail;
+3. keep the first vertical drop from the Gate fixed at 22 px;
+4. extend horizontally when a new Basic Event / House Event / Gate / Transfer is inserted;
+5. not produce independent auto-routed elbows with different rail heights.
+
+In GoJS this is implemented with a dedicated `RiskSpectrumBranchLink.computePoints()` router plus a `TreeLayout` with:
+
+- `angle = 90`;
+- `layerSpacing = 28`;
+- `nodeSpacing = 7`;
+- `alignment = TreeAlignment.Start`;
+- `compaction = TreeCompaction.Block`;
+- explicit port spots retained.
+
+The parent is intentionally aligned with the first/leftmost child, matching the supplied RiskSpectrum examples. Additional children extend to the right while the branch datum remains stable.

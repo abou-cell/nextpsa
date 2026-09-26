@@ -26,6 +26,53 @@ import {
   TRANSFER_GEOMETRY
 } from './fault-tree-symbols';
 
+/**
+ * RiskSpectrum-style branch link.
+ *
+ * The supplied RiskSpectrum screenshots use a fixed local branch grammar:
+ * parent symbol -> 22 px vertical drop -> shared horizontal rail ->
+ * 6 px vertical drop into every direct child on that branch.
+ *
+ * Because all direct children of a gate are placed on one TreeLayout layer,
+ * links from the same parent overlap on the first vertical segment and on
+ * the common rail. This reproduces the compact "bus" appearance of the
+ * desktop Fault Tree editor instead of generic per-link orthogonal routing.
+ */
+class RiskSpectrumBranchLink extends go.Link {
+  static readonly PARENT_DROP = 22;
+
+  override computePoints(): boolean {
+    const fromPort = this.fromPort;
+    const toPort = this.toPort;
+
+    if (!fromPort || !toPort) return super.computePoints();
+
+    // The invisible ports are centred exactly on the visible symbol output
+    // and the child record-box top edge respectively.
+    const start = fromPort.getDocumentPoint(go.Spot.Center);
+    const end = toPort.getDocumentPoint(go.Spot.Center);
+
+    if (
+      !Number.isFinite(start.x) ||
+      !Number.isFinite(start.y) ||
+      !Number.isFinite(end.x) ||
+      !Number.isFinite(end.y)
+    ) {
+      return super.computePoints();
+    }
+
+    const railY = start.y + RiskSpectrumBranchLink.PARENT_DROP;
+
+    this.clearPoints();
+    this.addPoint(start);
+    this.addPoint(new go.Point(start.x, railY));
+    this.addPoint(new go.Point(end.x, railY));
+    this.addPoint(end);
+
+    return true;
+  }
+}
+
 @Component({
   selector: 'app-fault-tree-editor',
   standalone: true,
@@ -570,10 +617,26 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       'undoManager.isEnabled': true,
       layout: $(go.TreeLayout, {
         angle: 90,
-        layerSpacing: 38,
-        nodeSpacing: 16,
-        alignment: go.TreeAlignment.CenterChildren,
-        compaction: go.TreeCompaction.Block
+
+        // Measured from the supplied RiskSpectrum FT screenshots:
+        // parent output -> branch rail ~22 px; rail -> child box ~6 px.
+        // TreeLayout layerSpacing is therefore 22 + 6 = 28 px.
+        layerSpacing: 28,
+
+        // RiskSpectrum keeps sibling record boxes very close: about 5-8 px
+        // depending on zoom. Seven pixels gives the same compact branch row
+        // with our 132 px record boxes.
+        nodeSpacing: 7,
+
+        // In the reference editor a parent is anchored over the first/leftmost
+        // input and additional inputs extend to the right. This also means that
+        // inserting another BE keeps the branch datum stable.
+        alignment: go.TreeAlignment.Start,
+        compaction: go.TreeCompaction.Block,
+
+        // Preserve the explicit IN/OUT spots used by the fixed branch router.
+        setsPortSpot: false,
+        setsChildPortSpot: false
       })
     });
 
@@ -592,25 +655,24 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     diagram.nodeTemplateMap.add('EXCHANGE_EVENT', makeTerminalNodeTemplate(transferArtwork()));
 
     diagram.linkTemplate =
-      $(go.Link, {
-          routing: go.Routing.Orthogonal,
-          corner: 0,
+      $(RiskSpectrumBranchLink, {
           selectable: true,
-          adjusting: go.LinkAdjusting.End
+          relinkableFrom: false,
+          relinkableTo: false
         },
         $(go.Shape, {
-          stroke: '#374151',
-          strokeWidth: 1.2
+          stroke: '#111111',
+          strokeWidth: 1.05
         }),
         $(go.Shape, {
             segmentIndex: -1,
-            segmentFraction: 0.87,
+            segmentFraction: 0.5,
             width: 8,
             height: 8,
             figure: 'Circle',
             fill: '#ffffff',
-            stroke: '#111827',
-            strokeWidth: 1.15
+            stroke: '#111111',
+            strokeWidth: 1.05
           },
           new go.Binding('visible', 'negated', Boolean)
         )
