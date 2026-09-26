@@ -414,13 +414,119 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       }
     };
 
+    const contextNode = (obj: go.GraphObject): go.Node | null => {
+      const adornment = obj.part;
+      if (!(adornment instanceof go.Adornment)) return null;
+      return adornment.adornedPart instanceof go.Node ? adornment.adornedPart : null;
+    };
+
+    const menuSeparator = () =>
+      $(go.Shape, 'LineH', {
+        stretch: go.Stretch.Horizontal,
+        height: 1,
+        stroke: '#d1d5db',
+        margin: new go.Margin(3, 2)
+      });
+
+    const menuButton = (
+      label: string,
+      action: string,
+      enabled = true
+    ) =>
+      $('ContextMenuButton',
+        {
+          height: 25,
+          stretch: go.Stretch.Horizontal,
+          isEnabled: enabled,
+          opacity: enabled ? 1 : 0.42,
+          click: (_event: go.InputEvent, obj: go.GraphObject) => {
+            if (!enabled) return;
+            const node = contextNode(obj);
+            if (node) this.handleContextAction(action, node);
+          }
+        },
+        $(go.TextBlock, label, {
+          width: 176,
+          margin: new go.Margin(3, 8),
+          font: '10px Inter, "Segoe UI", sans-serif',
+          stroke: '#111827',
+          textAlign: 'left'
+        })
+      );
+
+    const gateContextMenu = () =>
+      $('ContextMenu',
+        menuButton('Edit Event...', 'EDIT'),
+        menuButton('Change node Event...', 'CHANGE_NODE', false),
+        menuButton('Add input node   ›', 'ADD_INPUT'),
+        menuButton('Negate node', 'NEGATE'),
+        menuButton('State   ›', 'STATE'),
+        menuSeparator(),
+        menuButton('Edit Fault Tree...', 'EDIT_FAULT_TREE'),
+        menuButton('Insert Fault Tree...', 'INSERT_FAULT_TREE'),
+        menuSeparator(),
+        menuButton('Break into Transfer...', 'BREAK_TRANSFER'),
+        menuButton('Join transfer', 'JOIN_TRANSFER', false),
+        menuButton('Jump', 'JUMP', false),
+        menuButton('Jump to IE/FE', 'JUMP_IEFE', false),
+        menuButton('Open Transfer branch', 'OPEN_TRANSFER_BRANCH', false),
+        menuButton('Open CCF Group', 'OPEN_CCF_GROUP', false),
+        menuSeparator(),
+        menuButton('Select branch', 'SELECT_BRANCH'),
+        menuButton('Select inputs', 'SELECT_INPUTS'),
+        menuSeparator(),
+        menuButton('Cut', 'CUT'),
+        menuButton('Copy', 'COPY'),
+        menuButton('Paste', 'PASTE'),
+        menuButton('Delete', 'DELETE'),
+        menuSeparator(),
+        menuButton('Find...', 'FIND'),
+        menuButton('Replace...', 'REPLACE'),
+        menuSeparator(),
+        menuButton('Set record Status   ›', 'RECORD_STATUS')
+      );
+
+    const terminalContextMenu = (transfer = false) =>
+      $('ContextMenu',
+        menuButton('Edit Event...', 'EDIT'),
+        menuButton('Change node Event...', 'CHANGE_NODE'),
+        menuButton('Add input node   ›', 'ADD_INPUT'),
+        menuButton('Negate node', 'NEGATE'),
+        menuButton('State   ›', 'STATE'),
+        menuSeparator(),
+        menuButton('Edit Fault Tree...', 'EDIT_FAULT_TREE'),
+        menuButton('Insert Fault Tree...', 'INSERT_FAULT_TREE'),
+        menuSeparator(),
+        menuButton('Break into Transfer...', 'BREAK_TRANSFER', false),
+        menuButton('Join transfer', 'JOIN_TRANSFER', transfer),
+        menuButton('Jump', 'JUMP', transfer),
+        menuButton('Jump to IE/FE', 'JUMP_IEFE', false),
+        menuButton('Open Transfer branch', 'OPEN_TRANSFER_BRANCH', transfer),
+        menuSeparator(),
+        menuButton('Select branch', 'SELECT_BRANCH', false),
+        menuButton('Select inputs', 'SELECT_INPUTS', false),
+        menuSeparator(),
+        menuButton('Cut', 'CUT'),
+        menuButton('Copy', 'COPY'),
+        menuButton('Paste', 'PASTE'),
+        menuButton('Delete', 'DELETE'),
+        menuSeparator(),
+        menuButton('Find...', 'FIND'),
+        menuButton('Replace...', 'REPLACE'),
+        menuSeparator(),
+        menuButton('Set record Status   ›', 'RECORD_STATUS')
+      );
+
     const makeGateNodeTemplate = (
       gateType: GateType,
       topEvent = false
     ) =>
       $(go.Node, 'Spot',
         baseNodeProperties,
-        { selectionObjectName: 'LABEL' },
+        {
+          selectionObjectName: 'LABEL',
+          contextMenu: gateContextMenu()
+        },
         $(go.Panel, 'Vertical',
           labelPanel(topEvent ? '#d0d0d0' : '#ffffff', '#111111'),
           recordToSymbolConnector(4),
@@ -435,7 +541,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     ) =>
       $(go.Node, 'Spot',
         baseNodeProperties,
-        { selectionObjectName: 'LABEL' },
+        {
+          selectionObjectName: 'LABEL',
+          contextMenu: terminalContextMenu(artwork instanceof go.Shape && artwork.geometryString === TRANSFER_GEOMETRY)
+        },
         $(go.Panel, 'Vertical',
           labelPanel('#ffffff', '#111111'),
           recordToSymbolConnector(connectorHeight),
