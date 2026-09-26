@@ -16,6 +16,14 @@ import {
   FaultTreeModel,
   FaultTreeNodeData
 } from '../../core/models/psa.models';
+import {
+  gateCaption,
+  gateGeometry,
+  hasOutputNegationBubble,
+  HOUSE_EVENT_GEOMETRY,
+  isKofNGate,
+  TRANSFER_GEOMETRY
+} from './fault-tree-symbols';
 
 @Component({
   selector: 'app-fault-tree-editor',
@@ -24,23 +32,28 @@ import {
     <div class="ft-shell">
       <aside class="palette-shell">
         <div class="panel-title">
-          <span>PRA Elements</span>
-          <span class="panel-hint">drag to canvas</span>
+          <span>Fault Tree Symbols</span>
+          <span class="panel-hint">RiskSpectrum-style</span>
         </div>
+        <div class="palette-help">Drag a symbol to the diagram.</div>
         <div #paletteDiv class="palette-canvas"></div>
       </aside>
 
       <section class="diagram-shell">
         <div class="diagram-toolbar">
           <div class="toolbar-group">
-            <button type="button" (click)="undo()">↶</button>
-            <button type="button" (click)="redo()">↷</button>
+            <button type="button" title="Undo" (click)="undo()">↶</button>
+            <button type="button" title="Redo" (click)="redo()">↷</button>
           </div>
+          <div class="toolbar-separator"></div>
           <div class="toolbar-group">
-            <button type="button" (click)="zoom(-0.1)">−</button>
-            <span>{{ zoomPercent }}%</span>
-            <button type="button" (click)="zoom(0.1)">+</button>
+            <button type="button" title="Zoom out" (click)="zoom(-0.1)">−</button>
+            <span class="zoom-label">{{ zoomPercent }}%</span>
+            <button type="button" title="Zoom in" (click)="zoom(0.1)">+</button>
             <button type="button" (click)="fit()">Fit</button>
+          </div>
+          <div class="toolbar-note">
+            OR · AND · NAND · NOR · XOR · K/N · Basic · House · Undeveloped · Transfer
           </div>
           <div class="toolbar-group push-right">
             <span class="status-dot"></span>
@@ -53,19 +66,23 @@ import {
   `,
   styles: [`
     :host { display: block; height: 100%; min-height: 520px; }
-    .ft-shell { display: grid; grid-template-columns: 190px minmax(0, 1fr); height: 100%; background: #fff; }
-    .palette-shell { border-right: 1px solid var(--nps-border); background: #f8fbff; min-width: 0; }
-    .panel-title { height: 44px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--nps-border); font-weight: 700; font-size: 12px; }
-    .panel-hint { color: var(--nps-text-muted); font-weight: 500; font-size: 10px; }
-    .palette-canvas { height: calc(100% - 44px); min-height: 470px; background: #f8fbff; }
+    .ft-shell { display: grid; grid-template-columns: 228px minmax(0, 1fr); height: 100%; background: #fff; }
+    .palette-shell { border-right: 1px solid var(--nps-border); background: #f8fafc; min-width: 0; display: grid; grid-template-rows: 44px 28px 1fr; }
+    .panel-title { padding: 0 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--nps-border); font-weight: 700; font-size: 12px; background: #fff; }
+    .panel-hint { color: var(--nps-text-muted); font-weight: 600; font-size: 9px; }
+    .palette-help { display: flex; align-items: center; padding: 0 12px; color: var(--nps-text-muted); font-size: 9px; border-bottom: 1px solid #edf2f7; }
+    .palette-canvas { min-height: 440px; background: #f8fafc; }
     .diagram-shell { min-width: 0; min-height: 0; display: grid; grid-template-rows: 42px 1fr; }
-    .diagram-toolbar { display: flex; align-items: center; gap: 12px; padding: 0 10px; border-bottom: 1px solid var(--nps-border); background: #fff; color: var(--nps-text-muted); font-size: 11px; }
+    .diagram-toolbar { display: flex; align-items: center; gap: 10px; padding: 0 10px; border-bottom: 1px solid var(--nps-border); background: #fff; color: var(--nps-text-muted); font-size: 10px; }
     .toolbar-group { display: flex; align-items: center; gap: 5px; }
-    .toolbar-group button { height: 28px; min-width: 30px; border: 1px solid var(--nps-border); border-radius: 7px; background: #fff; color: var(--nps-text); cursor: pointer; }
+    .toolbar-group button { height: 28px; min-width: 30px; border: 1px solid var(--nps-border); border-radius: 6px; background: #fff; color: var(--nps-text); cursor: pointer; font-weight: 600; }
     .toolbar-group button:hover { background: #eef5ff; border-color: #b6cdf7; }
-    .push-right { margin-left: auto; }
+    .toolbar-separator { width: 1px; height: 20px; background: var(--nps-border); }
+    .toolbar-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #7b8798; }
+    .zoom-label { min-width: 38px; text-align: center; font-variant-numeric: tabular-nums; }
+    .push-right { margin-left: auto; white-space: nowrap; }
     .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; }
-    .diagram-canvas { min-height: 470px; width: 100%; height: 100%; background-color: #fff; background-image: linear-gradient(#edf2f7 1px, transparent 1px), linear-gradient(90deg, #edf2f7 1px, transparent 1px); background-size: 16px 16px; }
+    .diagram-canvas { min-height: 470px; width: 100%; height: 100%; background-color: #fff; background-image: linear-gradient(#eef2f6 1px, transparent 1px), linear-gradient(90deg, #eef2f6 1px, transparent 1px); background-size: 16px 16px; }
   `]
 })
 export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDestroy {
@@ -118,46 +135,121 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private initializeDiagram(): void {
     const $ = go.GraphObject.make;
 
-    const gateShape = (fill = '#eff6ff') =>
+    const gateSymbolPanel = () =>
       $(go.Panel, 'Spot',
-        { desiredSize: new go.Size(58, 40) },
+        { desiredSize: new go.Size(64, 48) },
         $(go.Shape, {
-          geometryString: 'F M0 38 L5 18 C10 3 48 3 53 18 L58 38 Z',
-          fill,
-          stroke: '#2563eb',
-          strokeWidth: 2
-        }),
+            width: 56,
+            height: 38,
+            alignment: new go.Spot(0.5, 0.62),
+            stretch: go.Stretch.Fill,
+            fill: '#ffffff',
+            stroke: '#111827',
+            strokeWidth: 1.35
+          },
+          new go.Binding('geometryString', 'gateType', gateGeometry),
+          new go.Binding('visible', 'gateType', (type: FaultTreeNodeData['gateType']) => !isKofNGate(type))
+        ),
+        $(go.Shape, 'Rectangle', {
+            width: 40,
+            height: 24,
+            alignment: new go.Spot(0.5, 0.62),
+            fill: '#ffffff',
+            stroke: '#111827',
+            strokeWidth: 1.2
+          },
+          new go.Binding('visible', 'gateType', isKofNGate)
+        ),
         $(go.TextBlock, {
-          font: '700 10px Inter, sans-serif',
-          stroke: '#1d4ed8',
-          alignment: new go.Spot(0.5, 0.58)
-        }, new go.Binding('text', 'gateType', (type: string) => type === 'KOFN' ? 'K/N' : type))
+            alignment: new go.Spot(0.5, 0.62),
+            font: '700 9px Inter, sans-serif',
+            stroke: '#111827'
+          },
+          new go.Binding('text', '', (data: FaultTreeNodeData) => gateCaption(data.gateType, data.k)),
+          new go.Binding('visible', 'gateType', isKofNGate)
+        ),
+        $(go.Shape, 'Circle', {
+            width: 8,
+            height: 8,
+            alignment: new go.Spot(0.5, 0, 0, 3),
+            fill: '#ffffff',
+            stroke: '#111827',
+            strokeWidth: 1.2
+          },
+          new go.Binding('visible', 'gateType', hasOutputNegationBubble)
+        )
       );
 
-    const labelPanel = () =>
+    const labelPanel = (fill = '#f2f2f2', stroke = '#777777') =>
       $(go.Panel, 'Auto',
+        { name: 'LABEL' },
         $(go.Shape, 'RoundedRectangle', {
-          fill: '#fffaf0',
-          stroke: '#c08a2a',
-          strokeWidth: 1.2,
-          parameter1: 5
+          fill,
+          stroke,
+          strokeWidth: 1,
+          parameter1: 3
         }),
-        $(go.Panel, 'Vertical', { margin: 6, maxSize: new go.Size(170, NaN) },
+        $(go.Panel, 'Vertical', { margin: new go.Margin(5, 8), maxSize: new go.Size(178, NaN) },
           $(go.TextBlock, {
-            font: '700 10px Inter, sans-serif',
-            stroke: '#172033',
+            font: '700 9px Inter, sans-serif',
+            stroke: '#111827',
             textAlign: 'center'
           }, new go.Binding('text', 'id')),
           $(go.TextBlock, {
             margin: new go.Margin(2, 0, 0, 0),
-            font: '9px Inter, sans-serif',
+            font: '8px Inter, sans-serif',
             stroke: '#475569',
             textAlign: 'center',
             wrap: go.Wrap.Fit,
-            maxSize: new go.Size(155, 34)
+            maxSize: new go.Size(160, 32)
           }, new go.Binding('text', 'description'))
         )
       );
+
+    const basicEventSymbol = () =>
+      $(go.Panel, 'Spot',
+        { desiredSize: new go.Size(40, 40) },
+        $(go.Shape, 'Circle', {
+            width: 31,
+            height: 31,
+            fill: '#ffffff',
+            stroke: '#111827',
+            strokeWidth: 1.35
+          },
+          new go.Binding('visible', 'symbol', (symbol: FaultTreeNodeData['symbol']) => symbol !== 'DIAMOND')
+        ),
+        $(go.Shape, 'Diamond', {
+            width: 28,
+            height: 28,
+            fill: '#ffffff',
+            stroke: '#111827',
+            strokeWidth: 1.25
+          },
+          new go.Binding('visible', 'symbol', (symbol: FaultTreeNodeData['symbol']) => symbol === 'DIAMOND')
+        )
+      );
+
+    const houseEventSymbol = () =>
+      $(go.Shape, {
+        geometryString: HOUSE_EVENT_GEOMETRY,
+        width: 34,
+        height: 34,
+        stretch: go.Stretch.Fill,
+        fill: '#ffffff',
+        stroke: '#111827',
+        strokeWidth: 1.25
+      });
+
+    const transferSymbol = () =>
+      $(go.Shape, {
+        geometryString: TRANSFER_GEOMETRY,
+        width: 34,
+        height: 34,
+        stretch: go.Stretch.Fill,
+        fill: null,
+        stroke: '#5b6472',
+        strokeWidth: 1.25
+      });
 
     const baseNodeProperties: Partial<go.Node> = {
       selectionAdorned: true,
@@ -174,28 +266,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       $(go.Node, 'Vertical',
         baseNodeProperties,
         { selectionObjectName: 'LABEL' },
-        $(go.Panel, 'Auto',
-          { name: 'LABEL' },
-          $(go.Shape, 'RoundedRectangle', {
-            fill: '#fee2e2',
-            stroke: '#dc2626',
-            strokeWidth: 1.4,
-            parameter1: 6
-          }),
-          $(go.Panel, 'Vertical', { margin: 7 },
-            $(go.TextBlock, { font: '800 11px Inter, sans-serif', stroke: '#7f1d1d' }, new go.Binding('text', 'id')),
-            $(go.TextBlock, {
-              margin: new go.Margin(2, 0, 0, 0),
-              font: '10px Inter, sans-serif',
-              stroke: '#991b1b',
-              wrap: go.Wrap.Fit,
-              textAlign: 'center',
-              maxSize: new go.Size(190, 36)
-            }, new go.Binding('text', 'description'))
-          )
-        ),
-        $(go.Shape, { height: 20, width: 1, stroke: '#334155' }),
-        gateShape('#eff6ff')
+        labelPanel('#cfcfcf', '#5f5f5f'),
+        $(go.Shape, { height: 12, width: 1, stroke: '#4b5563', strokeWidth: 1.2 }),
+        gateSymbolPanel()
       );
 
     const gateTemplate =
@@ -203,67 +276,53 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         baseNodeProperties,
         { selectionObjectName: 'LABEL' },
         labelPanel(),
-        $(go.Shape, { height: 16, width: 1, stroke: '#334155' }),
-        gateShape()
+        $(go.Shape, { height: 11, width: 1, stroke: '#4b5563', strokeWidth: 1.1 }),
+        gateSymbolPanel()
       );
 
     const basicTemplate =
       $(go.Node, 'Vertical',
         baseNodeProperties,
         { selectionObjectName: 'LABEL' },
-        labelPanel(),
-        $(go.Shape, 'Circle', {
-          width: 34,
-          height: 34,
-          fill: '#ffffff',
-          stroke: '#2563eb',
-          strokeWidth: 2
-        })
+        labelPanel('#f6f6f6', '#888888'),
+        $(go.Shape, { height: 8, width: 1, stroke: '#4b5563', strokeWidth: 1 }),
+        basicEventSymbol()
       );
 
     const houseTemplate =
       $(go.Node, 'Vertical',
         baseNodeProperties,
-        labelPanel(),
-        $(go.Shape, {
-          geometryString: 'F M0 14 L20 0 L40 14 L40 40 L0 40 Z',
-          width: 34,
-          height: 34,
-          fill: '#dcfce7',
-          stroke: '#16a34a',
-          strokeWidth: 2
-        })
+        { selectionObjectName: 'LABEL' },
+        labelPanel('#f6f6f6', '#888888'),
+        $(go.Shape, { height: 8, width: 1, stroke: '#4b5563', strokeWidth: 1 }),
+        houseEventSymbol()
       );
 
     const transferTemplate =
       $(go.Node, 'Vertical',
         baseNodeProperties,
-        labelPanel(),
-        $(go.Shape, 'TriangleUp', {
-          width: 38,
-          height: 34,
-          fill: '#ffffff',
-          stroke: '#7c3aed',
-          strokeWidth: 2
-        })
+        { selectionObjectName: 'LABEL' },
+        labelPanel('#f6f6f6', '#888888'),
+        $(go.Shape, { height: 7, width: 1, stroke: '#4b5563', strokeWidth: 1 }),
+        transferSymbol()
       );
 
     const diagram = $(go.Diagram, this.diagramDiv.nativeElement, {
       allowDrop: true,
       initialAutoScale: go.AutoScale.Uniform,
       contentAlignment: go.Spot.TopCenter,
-      padding: 36,
+      padding: 42,
       grid: $(go.Panel, 'Grid',
         { gridCellSize: new go.Size(16, 16) },
-        $(go.Shape, 'LineH', { stroke: '#edf2f7', strokeWidth: 0.5 }),
-        $(go.Shape, 'LineV', { stroke: '#edf2f7', strokeWidth: 0.5 })
+        $(go.Shape, 'LineH', { stroke: '#eef2f6', strokeWidth: 0.45 }),
+        $(go.Shape, 'LineV', { stroke: '#eef2f6', strokeWidth: 0.45 })
       ),
       'draggingTool.isGridSnapEnabled': true,
       'undoManager.isEnabled': true,
       layout: $(go.TreeLayout, {
         angle: 90,
-        layerSpacing: 78,
-        nodeSpacing: 26,
+        layerSpacing: 74,
+        nodeSpacing: 30,
         alignment: go.TreeAlignment.CenterChildren,
         compaction: go.TreeCompaction.Block
       })
@@ -287,16 +346,16 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           fromSpot: go.Spot.Bottom,
           toSpot: go.Spot.Top
         },
-        $(go.Shape, { stroke: '#334155', strokeWidth: 1.7 }),
+        $(go.Shape, { stroke: '#374151', strokeWidth: 1.25 }),
         $(go.Shape, {
             segmentIndex: -1,
-            segmentFraction: 0.86,
-            width: 9,
-            height: 9,
+            segmentFraction: 0.87,
+            width: 8,
+            height: 8,
             figure: 'Circle',
             fill: '#ffffff',
-            stroke: '#334155',
-            strokeWidth: 1.5
+            stroke: '#111827',
+            strokeWidth: 1.2
           },
           new go.Binding('visible', 'negated', Boolean)
         )
@@ -306,17 +365,108 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     this.diagram = diagram;
 
-    this.palette = $(go.Palette, this.paletteDiv.nativeElement, {
-      nodeTemplateMap: diagram.nodeTemplateMap,
-      model: new go.GraphLinksModel([
-        { key: 'palette-or', category: 'GATE', id: 'OR gate', description: 'Logic gate', gateType: 'OR', state: 'NORMAL', recordType: 'GAT' },
-        { key: 'palette-and', category: 'GATE', id: 'AND gate', description: 'Logic gate', gateType: 'AND', state: 'NORMAL', recordType: 'GAT' },
-        { key: 'palette-kn', category: 'GATE', id: 'K/N gate', description: 'Voting gate', gateType: 'KOFN', k: 2, state: 'NORMAL', recordType: 'GAT' },
-        { key: 'palette-be', category: 'BASIC_EVENT', id: 'Basic Event', description: 'Root-cause event', state: 'NORMAL', recordType: 'BEV' },
-        { key: 'palette-he', category: 'HOUSE_EVENT', id: 'House Event', description: 'TRUE / FALSE switch', state: 'FALSE', recordType: 'HEV' },
-        { key: 'palette-xfr', category: 'TRANSFER', id: 'Transfer', description: 'Transfer to fault tree', state: 'NORMAL', recordType: 'FTR' }
-      ] as FaultTreeNodeData[])
+    const paletteGateTemplate =
+      $(go.Node, 'Horizontal',
+        {
+          width: 202,
+          height: 48,
+          selectionAdorned: true,
+          cursor: 'grab'
+        },
+        gateSymbolPanel(),
+        $(go.TextBlock, {
+            margin: new go.Margin(0, 0, 0, 8),
+            width: 122,
+            font: '600 10px Inter, sans-serif',
+            stroke: '#1f2937'
+          },
+          new go.Binding('text', 'id')
+        )
+      );
+
+    const paletteBasicTemplate =
+      $(go.Node, 'Horizontal',
+        {
+          width: 202,
+          height: 48,
+          selectionAdorned: true,
+          cursor: 'grab'
+        },
+        basicEventSymbol(),
+        $(go.TextBlock, {
+            margin: new go.Margin(0, 0, 0, 20),
+            width: 122,
+            font: '600 10px Inter, sans-serif',
+            stroke: '#1f2937'
+          },
+          new go.Binding('text', 'id')
+        )
+      );
+
+    const paletteHouseTemplate =
+      $(go.Node, 'Horizontal',
+        {
+          width: 202,
+          height: 48,
+          selectionAdorned: true,
+          cursor: 'grab'
+        },
+        $(go.Panel, 'Spot', { width: 64, height: 44 }, houseEventSymbol()),
+        $(go.TextBlock, {
+            margin: new go.Margin(0, 0, 0, 0),
+            width: 122,
+            font: '600 10px Inter, sans-serif',
+            stroke: '#1f2937'
+          },
+          new go.Binding('text', 'id')
+        )
+      );
+
+    const paletteTransferTemplate =
+      $(go.Node, 'Horizontal',
+        {
+          width: 202,
+          height: 48,
+          selectionAdorned: true,
+          cursor: 'grab'
+        },
+        $(go.Panel, 'Spot', { width: 64, height: 44 }, transferSymbol()),
+        $(go.TextBlock, {
+            margin: new go.Margin(0, 0, 0, 0),
+            width: 122,
+            font: '600 10px Inter, sans-serif',
+            stroke: '#1f2937'
+          },
+          new go.Binding('text', 'id')
+        )
+      );
+
+    const palette = $(go.Palette, this.paletteDiv.nativeElement, {
+      layout: $(go.GridLayout, {
+        wrappingColumn: 1,
+        spacing: new go.Size(0, 1)
+      })
     });
+
+    palette.nodeTemplateMap.add('GATE', paletteGateTemplate);
+    palette.nodeTemplateMap.add('BASIC_EVENT', paletteBasicTemplate);
+    palette.nodeTemplateMap.add('HOUSE_EVENT', paletteHouseTemplate);
+    palette.nodeTemplateMap.add('TRANSFER', paletteTransferTemplate);
+
+    palette.model = new go.GraphLinksModel([
+      { key: 'palette-or', category: 'GATE', id: 'OR gate', description: 'At least one input TRUE', gateType: 'OR', state: 'NORMAL', recordType: 'GAT' },
+      { key: 'palette-and', category: 'GATE', id: 'AND gate', description: 'All inputs TRUE', gateType: 'AND', state: 'NORMAL', recordType: 'GAT' },
+      { key: 'palette-nand', category: 'GATE', id: 'NAND (NOT AND)', description: 'Negated AND', gateType: 'NAND', state: 'NORMAL', recordType: 'GAT' },
+      { key: 'palette-nor', category: 'GATE', id: 'NOR (NOT OR)', description: 'Negated OR', gateType: 'NOR', state: 'NORMAL', recordType: 'GAT' },
+      { key: 'palette-xor', category: 'GATE', id: 'XOR gate', description: 'Exactly one input TRUE', gateType: 'XOR', state: 'NORMAL', recordType: 'GAT' },
+      { key: 'palette-kn', category: 'GATE', id: 'K/N gate', description: 'K out of N inputs', gateType: 'KOFN', k: 2, state: 'NORMAL', recordType: 'GAT' },
+      { key: 'palette-be', category: 'BASIC_EVENT', id: 'Basic Event', description: 'Root-cause event', symbol: 'CIRCLE', state: 'NORMAL', recordType: 'BEV' },
+      { key: 'palette-undeveloped', category: 'BASIC_EVENT', id: 'Undeveloped Event', description: 'Undeveloped fault-tree branch', symbol: 'DIAMOND', state: 'NORMAL', recordType: 'BEV' },
+      { key: 'palette-he', category: 'HOUSE_EVENT', id: 'House Event', description: 'TRUE / FALSE logical switch', state: 'FALSE', recordType: 'HEV' },
+      { key: 'palette-xfr', category: 'TRANSFER', id: 'Transfer', description: 'Link to another fault tree', state: 'NORMAL', recordType: 'FTR' }
+    ] as FaultTreeNodeData[]);
+
+    this.palette = palette;
   }
 
   private applyModel(): void {

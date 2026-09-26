@@ -83,6 +83,7 @@ export interface FaultTreeNodeData {
   gateType?: GateType;
   k?: number;
   reliabilityModel?: ReliabilityModelType;
+  symbol?: 'CIRCLE' | 'DIAMOND';
   recordType: 'GAT' | 'BEV' | 'HEV' | 'FTR';
 }
 
