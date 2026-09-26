@@ -182,3 +182,27 @@ record box
 event symbol
 (no OUT)
 ```
+
+
+## Fixed logical levels and palette-click insertion
+
+The tree is organised by logical depth rather than free node coordinates.
+
+- Level 1: Top Event.
+- Level 2: all direct children of the Top Event.
+- Level 3: all direct children of level-2 Gates.
+- Level N: all linked components with the same graph depth share one fixed Y coordinate.
+- Fixed level pitch: 131 px, chosen from the current 103 px Gate node height plus the 28 px RiskSpectrum branch gap.
+- Linked nodes are not freely movable; their coordinates are controlled by the layout.
+- The Top Event anchor is preserved across subsequent re-layouts so adding children does not move the root.
+
+Quick insertion workflow:
+
+1. click/select a Gate or Top Event in the diagram;
+2. click an icon in the horizontal palette;
+3. NextPSA creates a new child record position;
+4. NextPSA creates the relation `parent.OUT -> child.IN`;
+5. the fixed-level layout runs;
+6. the parent stays selected so several children can be added successively.
+
+Terminal events (Basic Event, House Event, Undeveloped Event, Transfer) cannot be used as logical fathers.
