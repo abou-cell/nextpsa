@@ -76,11 +76,11 @@ export function gateOutputPortY(type: GateType | undefined): number {
     case 'NAND':
       return 48;
     case 'OR':
-      return 30;
+      return 35;
     case 'NOR':
-      return 38;
+      return 43;
     case 'XOR':
-      return 44;
+      return 40;
     case 'KOFN':
       return 28;
     default:
