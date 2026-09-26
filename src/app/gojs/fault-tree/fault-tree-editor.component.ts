@@ -315,9 +315,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
             stroke: '#1f2937',
             strokeWidth: gateType === 'AND' || gateType === 'NAND' ? 1.9 : 1.8,
             alignment: new go.Spot(0.5, 0.58),
-            visible: !isKofNGate(gateType)
-          },
-          { geometryString: gateGeometry(gateType) }
+            visible: !isKofNGate(gateType),
+            geometryString: gateGeometry(gateType)
+          }
         ),
         $(go.Shape, 'Circle', {
           desiredSize: new go.Size(8, 8),
@@ -336,12 +336,13 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           visible: isKofNGate(gateType)
         }),
         $(go.TextBlock, {
-          font: '700 9px Inter, sans-serif',
-          stroke: '#111827',
-          alignment: new go.Spot(0.5, 0.56),
-          visible: isKofNGate(gateType),
-          text: gateCaption(gateType, 2)
-        }),
+            font: '700 9px Inter, sans-serif',
+            stroke: '#111827',
+            alignment: new go.Spot(0.5, 0.56),
+            visible: isKofNGate(gateType)
+          },
+          new go.Binding('text', 'k', (k: number | undefined) => gateCaption(gateType, k))
+        ),
         ...(includeOutputPort ? [this.makeBottomPort()] : [])
       );
 
