@@ -419,14 +419,31 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     this.diagram = diagram;
 
     /**
-     * Palette symbols are intentionally 25% smaller than the diagram symbols.
-     * RiskSpectrum uses a compact symbol catalogue; keeping a fixed slot also
-     * makes AND/OR/NOR/NAND/XOR/K-N/BE/House/Transfer visually uniform.
+     * Palette symbols are another 15% smaller than the previous revision.
+     * The visual scale is now ~64% of the diagram symbol size.
+     *
+     * Scaling alone would also thin the vector strokes, so the palette copies
+     * get reinforced strokes before scaling. This keeps the compact symbols
+     * clearly visible, like the RiskSpectrum symbol catalogue.
      */
+    const reinforcePaletteStrokes = (object: go.GraphObject): void => {
+      if (object instanceof go.Shape && object.stroke) {
+        object.strokeWidth = Math.max(1.8, object.strokeWidth * 1.65);
+      }
+      if (object instanceof go.Panel) {
+        object.elements.each((child) => reinforcePaletteStrokes(child));
+      }
+    };
+
     const fixedSymbolSlot = (content: go.GraphObject) => {
-      content.scale = 0.75;
+      reinforcePaletteStrokes(content);
+      content.scale = 0.64;
       return $(go.Panel, 'Spot',
-        { width: 52, height: 40 },
+        {
+          width: 48,
+          height: 38,
+          alignment: go.Spot.Center
+        },
         content
       );
     };
@@ -435,13 +452,16 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       $(go.Node, 'Horizontal',
         {
           width: 202,
-          height: 42,
+          height: 46,
           selectionAdorned: true,
-          cursor: 'grab'
+          cursor: 'grab',
+          defaultAlignment: go.Spot.Center
         },
         fixedSymbolSlot(gateSymbolPanel()),
         $(go.TextBlock, {
-            width: 144,
+            width: 146,
+            margin: new go.Margin(0, 0, 0, 8),
+            verticalAlignment: go.Spot.Center,
             font: '600 9.5px Inter, sans-serif',
             stroke: '#1f2937'
           },
@@ -453,13 +473,16 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       $(go.Node, 'Horizontal',
         {
           width: 202,
-          height: 42,
+          height: 46,
           selectionAdorned: true,
-          cursor: 'grab'
+          cursor: 'grab',
+          defaultAlignment: go.Spot.Center
         },
         fixedSymbolSlot(basicEventSymbol()),
         $(go.TextBlock, {
-            width: 144,
+            width: 146,
+            margin: new go.Margin(0, 0, 0, 8),
+            verticalAlignment: go.Spot.Center,
             font: '600 9.5px Inter, sans-serif',
             stroke: '#1f2937'
           },
@@ -471,13 +494,16 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       $(go.Node, 'Horizontal',
         {
           width: 202,
-          height: 42,
+          height: 46,
           selectionAdorned: true,
-          cursor: 'grab'
+          cursor: 'grab',
+          defaultAlignment: go.Spot.Center
         },
         fixedSymbolSlot(houseEventSymbol()),
         $(go.TextBlock, {
-            width: 144,
+            width: 146,
+            margin: new go.Margin(0, 0, 0, 8),
+            verticalAlignment: go.Spot.Center,
             font: '600 9.5px Inter, sans-serif',
             stroke: '#1f2937'
           },
@@ -489,13 +515,16 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       $(go.Node, 'Horizontal',
         {
           width: 202,
-          height: 42,
+          height: 46,
           selectionAdorned: true,
-          cursor: 'grab'
+          cursor: 'grab',
+          defaultAlignment: go.Spot.Center
         },
         fixedSymbolSlot(transferSymbol()),
         $(go.TextBlock, {
-            width: 144,
+            width: 146,
+            margin: new go.Margin(0, 0, 0, 8),
+            verticalAlignment: go.Spot.Center,
             font: '600 9.5px Inter, sans-serif',
             stroke: '#1f2937'
           },
@@ -506,8 +535,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const palette = $(go.Palette, this.paletteDiv.nativeElement, {
       layout: $(go.GridLayout, {
         wrappingColumn: 1,
-        spacing: new go.Size(0, 0),
-        cellSize: new go.Size(202, 42)
+        spacing: new go.Size(0, 4),
+        cellSize: new go.Size(202, 46)
       })
     });
 
