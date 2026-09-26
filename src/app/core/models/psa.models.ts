@@ -84,6 +84,7 @@ export interface FaultTreeNodeData {
   k?: number;
   reliabilityModel?: ReliabilityModelType;
   symbol?: 'CIRCLE' | 'DIAMOND';
+  templateCategory?: string;
   recordType: 'GAT' | 'BEV' | 'HEV' | 'FTR';
 }
 
@@ -92,6 +93,8 @@ export interface FaultTreeLinkData {
   from: string;
   to: string;
   negated?: boolean;
+  fromPort?: 'OUT';
+  toPort?: 'IN';
 }
 
 export interface FaultTreeModel {
