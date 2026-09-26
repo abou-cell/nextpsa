@@ -32,15 +32,6 @@ import {
   standalone: true,
   template: `
     <div class="ft-shell">
-      <aside class="palette-shell">
-        <div class="panel-title">
-          <span>Fault Tree Symbols</span>
-          <span class="panel-hint">RiskSpectrum-style</span>
-        </div>
-        <div class="palette-help">Drag a symbol to the diagram.</div>
-        <div #paletteDiv class="palette-canvas"></div>
-      </aside>
-
       <section class="diagram-shell">
         <div class="diagram-toolbar">
           <div class="toolbar-group">
@@ -54,36 +45,40 @@ import {
             <button type="button" title="Zoom in" (click)="zoom(0.1)">+</button>
             <button type="button" (click)="fit()">Fit</button>
           </div>
-          <div class="toolbar-note">
-            OR · AND · NAND · NOR · XOR · K/N · Basic · House · Undeveloped · Transfer
-          </div>
           <div class="toolbar-group push-right">
             <span class="status-dot"></span>
             GoJS Fault Tree
           </div>
         </div>
+
+        <div class="symbol-toolbar">
+          <div class="symbol-toolbar-title">Fault Tree Symbols</div>
+          <div class="symbol-toolbar-divider"></div>
+          <div #paletteDiv class="palette-toolbar-canvas" aria-label="Fault Tree symbol palette"></div>
+          <div class="symbol-toolbar-help">Drag a symbol onto the fault tree</div>
+        </div>
+
         <div #diagramDiv class="diagram-canvas" aria-label="NextPSA fault tree diagram"></div>
       </section>
     </div>
   `,
   styles: [`
     :host { display: block; height: 100%; min-height: 520px; }
-    .ft-shell { display: grid; grid-template-columns: 228px minmax(0, 1fr); height: 100%; background: #fff; }
-    .palette-shell { border-right: 1px solid var(--nps-border); background: #f8fafc; min-width: 0; display: grid; grid-template-rows: 44px 28px 1fr; }
-    .panel-title { padding: 0 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--nps-border); font-weight: 700; font-size: 12px; background: #fff; }
-    .panel-hint { color: var(--nps-text-muted); font-weight: 600; font-size: 9px; }
-    .palette-help { display: flex; align-items: center; padding: 0 12px; color: var(--nps-text-muted); font-size: 9px; border-bottom: 1px solid #edf2f7; }
-    .palette-canvas { min-height: 440px; background: #f8fafc; }
-    .diagram-shell { min-width: 0; min-height: 0; display: grid; grid-template-rows: 42px 1fr; }
+    .ft-shell { height: 100%; background: #fff; }
+    .diagram-shell { min-width: 0; min-height: 0; height: 100%; display: grid; grid-template-rows: 42px 58px 1fr; }
     .diagram-toolbar { display: flex; align-items: center; gap: 10px; padding: 0 10px; border-bottom: 1px solid var(--nps-border); background: #fff; color: var(--nps-text-muted); font-size: 10px; }
     .toolbar-group { display: flex; align-items: center; gap: 5px; }
     .toolbar-group button { height: 28px; min-width: 30px; border: 1px solid var(--nps-border); border-radius: 6px; background: #fff; color: var(--nps-text); cursor: pointer; font-weight: 600; }
     .toolbar-group button:hover { background: #eef5ff; border-color: #b6cdf7; }
     .toolbar-separator { width: 1px; height: 20px; background: var(--nps-border); }
-    .toolbar-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #7b8798; }
     .zoom-label { min-width: 38px; text-align: center; font-variant-numeric: tabular-nums; }
     .push-right { margin-left: auto; white-space: nowrap; }
     .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; }
+    .symbol-toolbar { min-width: 0; display: grid; grid-template-columns: auto 1px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 5px 10px; border-bottom: 1px solid var(--nps-border); background: #fbfdff; }
+    .symbol-toolbar-title { font-size: 10px; font-weight: 800; color: #334155; white-space: nowrap; letter-spacing: .01em; }
+    .symbol-toolbar-divider { width: 1px; height: 28px; background: var(--nps-border); }
+    .palette-toolbar-canvas { width: 100%; height: 46px; min-width: 0; background: transparent; }
+    .symbol-toolbar-help { color: #94a3b8; font-size: 9px; white-space: nowrap; }
     .diagram-canvas { min-height: 470px; width: 100%; height: 100%; background-color: #fff; background-image: linear-gradient(#eef2f6 1px, transparent 1px), linear-gradient(90deg, #eef2f6 1px, transparent 1px); background-size: 16px 16px; }
   `]
 })
@@ -154,8 +149,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
             height: 40,
             stretch: go.Stretch.Fill,
             fill: '#ffffff',
-            stroke: '#111827',
-            strokeWidth: 1.25
+            stroke: '#0f172a',
+            strokeWidth: 1.5
           },
           new go.Binding('geometryString', 'gateType', gateGeometry),
           new go.Binding('position', 'gateType', (type: FaultTreeNodeData['gateType']) =>
@@ -419,16 +414,15 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     this.diagram = diagram;
 
     /**
-     * Palette symbols are another 15% smaller than the previous revision.
-     * The visual scale is now ~64% of the diagram symbol size.
+     * Horizontal icon-only palette. The symbols remain compact but are rendered
+     * at higher visual resolution than the former vertical catalogue.
      *
-     * Scaling alone would also thin the vector strokes, so the palette copies
-     * get reinforced strokes before scaling. This keeps the compact symbols
-     * clearly visible, like the RiskSpectrum symbol catalogue.
+     * Text labels are deliberately removed from the bar; accessible names stay
+     * available through GoJS tooltips.
      */
     const reinforcePaletteStrokes = (object: go.GraphObject): void => {
       if (object instanceof go.Shape && object.stroke) {
-        object.strokeWidth = Math.max(1.8, object.strokeWidth * 1.65);
+        object.strokeWidth = Math.max(2.0, object.strokeWidth * 1.65);
       }
       if (object instanceof go.Panel) {
         object.elements.each((child) => reinforcePaletteStrokes(child));
@@ -437,106 +431,94 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     const fixedSymbolSlot = (content: go.GraphObject) => {
       reinforcePaletteStrokes(content);
-      content.scale = 0.64;
+      content.scale = 0.82;
       return $(go.Panel, 'Spot',
         {
           width: 48,
-          height: 38,
+          height: 42,
           alignment: go.Spot.Center
         },
         content
       );
     };
 
+    const paletteToolTip = () =>
+      $('ToolTip',
+        $(go.Panel, 'Auto',
+          $(go.Shape, 'RoundedRectangle', {
+            fill: '#0f172a',
+            stroke: null,
+            parameter1: 5
+          }),
+          $(go.TextBlock, {
+              margin: new go.Margin(5, 8),
+              font: '600 9px Inter, sans-serif',
+              stroke: '#ffffff'
+            },
+            new go.Binding('text', 'id')
+          )
+        )
+      );
+
     const paletteGateTemplate =
-      $(go.Node, 'Horizontal',
+      $(go.Node, 'Spot',
         {
-          width: 202,
-          height: 46,
+          width: 52,
+          height: 44,
           selectionAdorned: true,
           cursor: 'grab',
-          defaultAlignment: go.Spot.Center
+          toolTip: paletteToolTip()
         },
-        fixedSymbolSlot(gateSymbolPanel()),
-        $(go.TextBlock, {
-            width: 146,
-            margin: new go.Margin(0, 0, 0, 8),
-            verticalAlignment: go.Spot.Center,
-            font: '600 9.5px Inter, sans-serif',
-            stroke: '#1f2937'
-          },
-          new go.Binding('text', 'id')
-        )
+        fixedSymbolSlot(gateSymbolPanel())
       );
 
     const paletteBasicTemplate =
-      $(go.Node, 'Horizontal',
+      $(go.Node, 'Spot',
         {
-          width: 202,
-          height: 46,
+          width: 52,
+          height: 44,
           selectionAdorned: true,
           cursor: 'grab',
-          defaultAlignment: go.Spot.Center
+          toolTip: paletteToolTip()
         },
-        fixedSymbolSlot(basicEventSymbol()),
-        $(go.TextBlock, {
-            width: 146,
-            margin: new go.Margin(0, 0, 0, 8),
-            verticalAlignment: go.Spot.Center,
-            font: '600 9.5px Inter, sans-serif',
-            stroke: '#1f2937'
-          },
-          new go.Binding('text', 'id')
-        )
+        fixedSymbolSlot(basicEventSymbol())
       );
 
     const paletteHouseTemplate =
-      $(go.Node, 'Horizontal',
+      $(go.Node, 'Spot',
         {
-          width: 202,
-          height: 46,
+          width: 52,
+          height: 44,
           selectionAdorned: true,
           cursor: 'grab',
-          defaultAlignment: go.Spot.Center
+          toolTip: paletteToolTip()
         },
-        fixedSymbolSlot(houseEventSymbol()),
-        $(go.TextBlock, {
-            width: 146,
-            margin: new go.Margin(0, 0, 0, 8),
-            verticalAlignment: go.Spot.Center,
-            font: '600 9.5px Inter, sans-serif',
-            stroke: '#1f2937'
-          },
-          new go.Binding('text', 'id')
-        )
+        fixedSymbolSlot(houseEventSymbol())
       );
 
     const paletteTransferTemplate =
-      $(go.Node, 'Horizontal',
+      $(go.Node, 'Spot',
         {
-          width: 202,
-          height: 46,
+          width: 52,
+          height: 44,
           selectionAdorned: true,
           cursor: 'grab',
-          defaultAlignment: go.Spot.Center
+          toolTip: paletteToolTip()
         },
-        fixedSymbolSlot(transferSymbol()),
-        $(go.TextBlock, {
-            width: 146,
-            margin: new go.Margin(0, 0, 0, 8),
-            verticalAlignment: go.Spot.Center,
-            font: '600 9.5px Inter, sans-serif',
-            stroke: '#1f2937'
-          },
-          new go.Binding('text', 'id')
-        )
+        fixedSymbolSlot(transferSymbol())
       );
 
     const palette = $(go.Palette, this.paletteDiv.nativeElement, {
+      allowMove: false,
+      allowDelete: false,
+      contentAlignment: go.Spot.Left,
+      padding: new go.Margin(1, 0, 1, 0),
       layout: $(go.GridLayout, {
-        wrappingColumn: 1,
-        spacing: new go.Size(0, 4),
-        cellSize: new go.Size(202, 46)
+        wrappingColumn: 10,
+        wrappingWidth: Number.POSITIVE_INFINITY,
+        spacing: new go.Size(7, 0),
+        cellSize: new go.Size(52, 44),
+        alignment: go.GridAlignment.Position
       })
     });
 
