@@ -38,6 +38,74 @@ import {
  * the common rail. This reproduces the compact "bus" appearance of the
  * desktop Fault Tree editor instead of generic per-link orthogonal routing.
  */
+class RiskSpectrumLevelLayout extends go.TreeLayout {
+  static readonly LEVEL_PITCH = 131;
+
+  private rootAnchor: go.Point | null = null;
+
+  resetRootAnchor(): void {
+    this.rootAnchor = null;
+  }
+
+  override commitNodes(): void {
+    super.commitNodes();
+
+    const diagram = this.diagram;
+    if (!diagram) return;
+
+    let root: go.Node | null = null;
+
+    diagram.nodes.each((node) => {
+      if (root) return;
+      const data = node.data as FaultTreeNodeData;
+      if (data.category === 'TOP_EVENT') root = node;
+    });
+
+    if (!root) {
+      diagram.nodes.each((node) => {
+        if (root) return;
+        if (!node.findLinksInto().first()) root = node;
+      });
+    }
+
+    if (!root) return;
+
+    const layoutRootPosition = root.position.copy();
+
+    if (!this.rootAnchor) {
+      this.rootAnchor = layoutRootPosition.copy();
+    }
+
+    const xShift = this.rootAnchor.x - layoutRootPosition.x;
+    const depth = new Map<go.Node, number>();
+    const queue: go.Node[] = [root];
+
+    depth.set(root, 0);
+
+    while (queue.length) {
+      const current = queue.shift()!;
+      const currentDepth = depth.get(current) ?? 0;
+
+      current.findNodesOutOf().each((child) => {
+        const nextDepth = currentDepth + 1;
+        const existingDepth = depth.get(child);
+
+        if (existingDepth === undefined || nextDepth < existingDepth) {
+          depth.set(child, nextDepth);
+          queue.push(child);
+        }
+      });
+    }
+
+    depth.forEach((level, node) => {
+      node.moveTo(
+        node.position.x + xShift,
+        this.rootAnchor!.y + level * RiskSpectrumLevelLayout.LEVEL_PITCH
+      );
+    });
+  }
+}
+
 class RiskSpectrumBranchLink extends go.Link {
   static readonly PARENT_DROP = 22;
 
