@@ -179,7 +179,7 @@ class RiskSpectrumBranchLink extends go.Link {
           </div>
 
           <div class="palette-toolbar-right">
-            <span>Drag a symbol onto the fault tree</span>
+            <span>Select a Gate, then click a symbol</span>
           </div>
         </div>
 
@@ -291,6 +291,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
   private diagram?: go.Diagram;
   private palette?: go.Palette;
+  private insertionSerial = 0;
   zoomPercent = 100;
 
   constructor(private readonly zone: NgZone) {}
@@ -515,6 +516,11 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const baseNodeProperties: Partial<go.Node> = {
       selectionAdorned: true,
       locationSpot: go.Spot.Center,
+
+      // Once a component belongs to the logical tree its level is controlled
+      // entirely by RiskSpectrumLevelLayout. Users select/edit nodes rather
+      // than freely dragging them off their branch level.
+      movable: false,
       selectionChanged: (node) => {
         const data = node.isSelected ? node.data as FaultTreeNodeData : null;
         this.zone.run(() => this.selectedNodeChange.emit(data));
@@ -636,10 +642,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         {
           selectionObjectName: 'LABEL',
           contextMenu: gateContextMenu(),
-          movable: !topEvent,
           copyable: !topEvent,
           deletable: !topEvent,
-          cursor: topEvent ? 'default' : 'move'
+          cursor: 'default'
         },
         $(go.Panel, 'Vertical',
           labelPanel(topEvent ? '#d0d0d0' : '#ffffff', '#111111'),
@@ -679,7 +684,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       ),
       'draggingTool.isGridSnapEnabled': true,
       'undoManager.isEnabled': true,
-      layout: $(go.TreeLayout, {
+      layout: $(RiskSpectrumLevelLayout, {
         angle: 90,
 
         // Measured from the supplied RiskSpectrum FT screenshots:
@@ -803,9 +808,18 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           width: 56,
           height: 40,
           selectionAdorned: true,
-          cursor: 'grab',
+          cursor: 'pointer',
           locationSpot: go.Spot.Center,
-          toolTip: paletteToolTip()
+          toolTip: paletteToolTip(),
+          click: (_event: go.InputEvent, obj: go.GraphObject) => {
+            const paletteNode = obj.part;
+            if (paletteNode instanceof go.Node) {
+              this.insertPaletteNodeFromClick(
+                diagram,
+                paletteNode.data as FaultTreeNodeData
+              );
+            }
+          }
         },
         fixedSymbolSlot(artwork)
       );
@@ -858,6 +872,92 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     palette.model = paletteModel;
 
     this.palette = palette;
+  }
+
+  /**
+   * RiskSpectrum-like quick insertion:
+   * 1. select an existing Gate / Top Event in the diagram;
+   * 2. click one symbol in the horizontal palette;
+   * 3. create the child and its logical OUT -> IN relation;
+   * 4. re-layout the complete tree on fixed depth levels.
+   */
+  private insertPaletteNodeFromClick(
+    diagram: go.Diagram,
+    paletteData: FaultTreeNodeData
+  ): void {
+    let parent: go.Node | null = null;
+
+    diagram.selection.each((part) => {
+      if (parent || !(part instanceof go.Node)) return;
+      const data = part.data as FaultTreeNodeData;
+
+      if (data.category === 'TOP_EVENT' || data.category === 'GATE') {
+        parent = part;
+      }
+    });
+
+    // A terminal event cannot become a logical father. If no Gate/Top Event is
+    // selected, a palette click is intentionally a no-op.
+    if (!parent) return;
+
+    const serial = ++this.insertionSerial;
+    const prefix = this.paletteNodePrefix(paletteData);
+    const serialText = String(serial).padStart(3, '0');
+    const nodeKey = `FTNODE-NEW-${prefix}-${serialText}`;
+    const nodeId = `NEW-${prefix}-${serialText}`;
+
+    const child: FaultTreeNodeData = {
+      ...paletteData,
+      key: nodeKey,
+      id: nodeId,
+      description: `New ${paletteData.id}`,
+      templateCategory: this.resolveTemplateCategory(paletteData)
+    };
+
+    const linkData = {
+      key: `AUTO-${String(parent.key)}-${nodeKey}`,
+      from: String(parent.key),
+      to: nodeKey,
+      fromPort: 'OUT' as const,
+      toPort: 'IN' as const,
+      negated: false
+    };
+
+    const graphModel = diagram.model as go.GraphLinksModel;
+
+    diagram.startTransaction('Add fault-tree child from palette');
+    graphModel.addNodeData(child);
+    graphModel.addLinkData(linkData);
+    diagram.commitTransaction('Add fault-tree child from palette');
+
+    // Keep the in-memory Angular model aligned with the GoJS model so another
+    // editor refresh does not discard the newly inserted child.
+    this.model.nodes.push({ ...child });
+    this.model.links.push({ ...linkData });
+
+    diagram.layoutDiagram(true);
+
+    // Keep the logical father selected so the user can add several children
+    // by clicking multiple palette symbols in succession.
+    const refreshedParent = diagram.findNodeForKey(parent.key);
+    if (refreshedParent) diagram.select(refreshedParent);
+  }
+
+  private paletteNodePrefix(node: FaultTreeNodeData): string {
+    if (node.category === 'GATE') {
+      return node.gateType === 'KOFN'
+        ? 'KN'
+        : (node.gateType ?? 'GATE');
+    }
+
+    if (node.category === 'BASIC_EVENT') {
+      return node.symbol === 'DIAMOND' ? 'UE' : 'BE';
+    }
+
+    if (node.category === 'HOUSE_EVENT') return 'HE';
+    if (node.category === 'TRANSFER') return 'XFR';
+
+    return 'NODE';
   }
 
   private handleContextAction(action: string, node: go.Node): void {
