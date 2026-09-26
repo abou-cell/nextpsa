@@ -1,14 +1,27 @@
 import { GateType } from '../../core/models/psa.models';
 
 /**
- * RiskSpectrum-inspired geometry for the NextPSA Fault Tree editor.
+ * Original GoJS vector equivalents of the RiskSpectrum fault-tree symbol family.
  *
- * These paths are original GoJS equivalents based on the visual conventions
- * used by RiskSpectrum: they are not raster assets copied from the desktop UI.
+ * Coordinate conventions:
+ * - every logic gate is symmetric around x = 30
+ * - normal gate output is exactly at (30, 0)
+ * - normal gate input base terminates at y = 40
+ * - NAND/NOR add an inversion bubble above the same gate geometry
+ * - K/N is a compact rectangular voting symbol
+ *
+ * Keeping the top and bottom boundaries exact is important because the parent/child
+ * link is routed from the node bounds. This avoids the visible gaps that existed in V1.
  */
-const AND_GEOMETRY = 'F M7 36 L7 22 C7 10 16 5 28 5 C40 5 49 10 49 22 L49 36 Z';
-const OR_GEOMETRY = 'F M6 36 C9 18 17 7 28 6 C39 7 47 18 50 36 C39 30 17 30 6 36 Z';
-const XOR_GEOMETRY = 'F M9 36 C12 18 19 7 29 6 C40 7 48 18 51 36 C40 30 19 30 9 36 Z M4 36 C15 29 42 29 56 36';
+const AND_GEOMETRY =
+  'F M6 40 L6 22 C6 9 16 0 30 0 C44 0 54 9 54 22 L54 40 Z';
+
+const OR_GEOMETRY =
+  'F M5 40 C8 20 15 5 30 0 C45 5 52 20 55 40 C43 33 17 33 5 40 Z';
+
+const XOR_GEOMETRY =
+  'F M7 38 C10 19 17 5 30 0 C43 5 50 19 53 38 C42 32 18 32 7 38 Z ' +
+  'M4 42 C17 34 43 34 56 42';
 
 export function gateGeometry(type: GateType | undefined): string {
   switch (type) {
@@ -38,5 +51,16 @@ export function gateCaption(type: GateType | undefined, k?: number): string {
   return type ?? 'UNDEFINED';
 }
 
-export const HOUSE_EVENT_GEOMETRY = 'F M2 39 L2 16 L22 2 L42 16 L42 39 Z';
-export const TRANSFER_GEOMETRY = 'M22 2 L42 39 M22 2 L2 39';
+export function gateSymbolHeight(type: GateType | undefined): number {
+  if (type === 'KOFN') return 24;
+  if (hasOutputNegationBubble(type)) return 48;
+  return type === 'XOR' ? 42 : 40;
+}
+
+/** House Event: closed, symmetric house / pentagon. */
+export const HOUSE_EVENT_GEOMETRY =
+  'F M22 0 L42 15 L42 38 L2 38 L2 15 Z';
+
+/** Transfer: closed, symmetric triangle as requested for NextPSA. */
+export const TRANSFER_GEOMETRY =
+  'F M22 0 L42 38 L2 38 Z';
