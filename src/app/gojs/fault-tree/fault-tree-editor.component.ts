@@ -980,65 +980,161 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     });
   }
 
-  private canDropSelectionOnBranch(diagram: go.Diagram, targetLink: go.Link): boolean {
-    const targetParent = targetLink.fromNode;
-    if (!targetParent) return false;
-
-    const targetData = targetParent.data as FaultTreeNodeData;
-    if (targetData.category !== 'TOP_EVENT' && targetData.category !== 'GATE') return false;
-
+  /**
+   * Cross-level branch move.
+   *
+   * The drag itself is NOT constrained by logical level. On mouse release we
+   * inspect the cursor position and look for the nearest valid branch line.
+   * If one is found, the selected component / complete selected subtree is
+   * reparented to that branch. Otherwise normal magnetic horizontal placement
+   * handles the move and restores the fixed Y level.
+   */
+  private tryReparentSelectionAtDrop(diagram: go.Diagram): boolean {
     const roots = this.selectedMoveRoots(diagram)
       .filter((node) => (node.data as FaultTreeNodeData).category !== 'TOP_EVENT');
 
     if (!roots.length) return false;
 
     for (const root of roots) {
-      // Never move a partial subtree by accident. If the root owns descendants,
-      // the complete branch must first be selected.
+      // A Gate/subtree may only be transferred after Select branch has selected
+      // the complete subtree. A terminal component has no descendants, so it can
+      // be transferred directly.
       if (root.findLinksOutOf().first() && !this.isCompleteBranchSelected(root)) {
         return false;
       }
-
-      if (root === targetParent) return false;
-
-      // Reject target parent inside the moved subtree: this would create a cycle.
-      if (this.nodeCanReach(root, targetParent)) return false;
     }
 
-    return true;
+    const dropPoint = diagram.lastInput.documentPoint;
+    const targetLink = this.findNearestValidBranchLink(diagram, dropPoint, roots);
+
+    if (!targetLink?.fromNode) return false;
+
+    return this.reparentSelectionToParentAsLast(
+      diagram,
+      targetLink.fromNode,
+      roots
+    );
   }
 
   /**
-   * Move the selected component or complete selected branch to the target
-   * branch and append it as the LAST child of that branch.
+   * Locate a branch near the physical mouse-drop position.
    *
-   * Logical behavior:
-   * - remove each move-root's previous incoming relation, if any;
-   * - preserve its subtree;
-   * - create targetParent.OUT -> root.IN;
-   * - append the new relation after all current target-parent children;
-   * - re-layout to fixed RiskSpectrum levels / magnetic non-overlapping slots.
+   * This replaces the previous Link mouseDrop/highlight implementation.
+   * No branch is coloured or visually enlarged. We simply measure distance to
+   * the existing thin RiskSpectrum link geometry.
    */
-  private moveSelectionToBranchAsLast(
+  private findNearestValidBranchLink(
     diagram: go.Diagram,
-    targetLink: go.Link
-  ): void {
-    if (!this.canDropSelectionOnBranch(diagram, targetLink)) return;
+    point: go.Point,
+    roots: readonly go.Node[]
+  ): go.Link | null {
+    const tolerance = 18 / Math.max(0.35, diagram.scale);
+    let best: go.Link | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
 
-    const targetParent = targetLink.fromNode;
-    if (!targetParent) return;
+    diagram.links.each((link) => {
+      const parent = link.fromNode;
+      if (!parent) return;
 
-    const roots = this.selectedMoveRoots(diagram)
-      .filter((node) => (node.data as FaultTreeNodeData).category !== 'TOP_EVENT')
-      .sort((a, b) => a.actualBounds.center.x - b.actualBounds.center.x);
+      const parentData = parent.data as FaultTreeNodeData;
+      if (parentData.category !== 'TOP_EVENT' && parentData.category !== 'GATE') return;
 
-    if (!roots.length) return;
+      // Target Gate must own an output. All Gate/Top Event templates do.
+      if (!parent.findPort('OUT')) return;
+
+      for (const root of roots) {
+        if (root === parent) return;
+
+        // Parent may not sit inside the subtree being moved.
+        if (this.nodeCanReach(root, parent)) return;
+      }
+
+      const distance = this.distanceFromPointToLink(point, link);
+
+      if (distance <= tolerance && distance < bestDistance) {
+        best = link;
+        bestDistance = distance;
+      }
+    });
+
+    return best;
+  }
+
+  private distanceFromPointToLink(point: go.Point, link: go.Link): number {
+    if (link.pointsCount < 2) return Number.POSITIVE_INFINITY;
+
+    let minimum = Number.POSITIVE_INFINITY;
+
+    for (let index = 0; index < link.pointsCount - 1; index += 1) {
+      const a = link.getPoint(index);
+      const b = link.getPoint(index + 1);
+      minimum = Math.min(minimum, this.distanceFromPointToSegment(point, a, b));
+    }
+
+    return minimum;
+  }
+
+  private distanceFromPointToSegment(
+    point: go.Point,
+    a: go.Point,
+    b: go.Point
+  ): number {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lengthSquared = dx * dx + dy * dy;
+
+    if (lengthSquared === 0) {
+      return Math.hypot(point.x - a.x, point.y - a.y);
+    }
+
+    const t = Math.max(
+      0,
+      Math.min(
+        1,
+        ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared
+      )
+    );
+
+    const projectionX = a.x + t * dx;
+    const projectionY = a.y + t * dy;
+
+    return Math.hypot(point.x - projectionX, point.y - projectionY);
+  }
+
+  /**
+   * Reparent one selected component or one/more complete selected subtrees to a
+   * Gate/Top Event, regardless of source/target level.
+   *
+   * Existing descendants remain untouched. Only each selected root's incoming
+   * relation changes. The moved root(s) are appended after the target parent's
+   * existing children, then the fixed-level layout recalculates their NEW depth.
+   */
+  private reparentSelectionToParentAsLast(
+    diagram: go.Diagram,
+    targetParent: go.Node,
+    roots: readonly go.Node[]
+  ): boolean {
+    const targetData = targetParent.data as FaultTreeNodeData;
+
+    if (targetData.category !== 'TOP_EVENT' && targetData.category !== 'GATE') {
+      return false;
+    }
+
+    if (!targetParent.findPort('OUT')) return false;
+
+    for (const root of roots) {
+      if (root === targetParent) return false;
+      if (this.nodeCanReach(root, targetParent)) return false;
+    }
 
     const graphModel = diagram.model as go.GraphLinksModel;
 
-    // Snapshot existing target children in their current visual order.
+    // Snapshot current target children in visual order. If a moved root is
+    // already a child of this parent, excluding it here means the same-parent
+    // operation simply sends it to the last/rightmost position.
     const targetLinksBefore: go.Link[] = [];
     targetParent.findLinksOutOf().each((link) => targetLinksBefore.push(link));
+
     targetLinksBefore.sort((a, b) => {
       const ax = a.toNode?.actualBounds.center.x ?? 0;
       const bx = b.toNode?.actualBounds.center.x ?? 0;
@@ -1056,7 +1152,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       data: Record<string, unknown>;
     }> = [];
 
-    diagram.startTransaction('Move selection to branch as last child');
+    diagram.startTransaction('Reparent FT selection to branch');
 
     for (const root of roots) {
       const incoming = root.findLinksInto().first();
@@ -1080,8 +1176,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       }
     }
 
-    // Rebuild target-parent outgoing link order explicitly:
-    // existing target children first, moved roots last.
+    // Rebuild only the target parent's outgoing link order: existing children
+    // first, transferred component/subtree root(s) last.
     const currentTargetLinks: go.Link[] = [];
     targetParent.findLinksOutOf().each((link) => currentTargetLinks.push(link));
     currentTargetLinks.forEach((link) => graphModel.removeLinkData(link.data));
@@ -1104,14 +1200,13 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     movedLinkData.forEach((linkData) => graphModel.addLinkData(linkData));
 
-    diagram.commitTransaction('Move selection to branch as last child');
+    diagram.commitTransaction('Reparent FT selection to branch');
 
-    // Keep the Angular-side source model synchronized with GoJS.
-    const movedKeys = new Set(roots.map((root) => String(root.key)));
+    // Synchronize the Angular-side model.
     const targetParentKey = String(targetParent.key);
 
     this.model.links = this.model.links.filter((link) => {
-      if (movedKeys.has(String(link.to))) return false;
+      if (movedRootKeys.has(String(link.to))) return false;
       if (String(link.from) === targetParentKey) return false;
       return true;
     });
@@ -1131,30 +1226,23 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       this.model.links.push({ ...linkData });
     });
 
-    // This explicit drop defines the sibling ordering. Suppress any subsequent
-    // SelectionMoved magnetic reorder that could otherwise put it back according
-    // to the temporary drag X coordinate.
-    this.suppressNextMagneticFinalize = true;
-
-    // Recompute levels and collision-free magnetic slots. Since moved links were
-    // appended after all existing target links, the moved component/branch is the
-    // LAST (rightmost) child of the target branch.
+    // New parent may be at ANY level. Layout now derives the moved root's new
+    // depth and places its complete subtree at the corresponding fixed levels.
     diagram.layoutDiagram(true);
 
-    // Keep the moved roots/branches selected for immediate visual feedback.
+    // Restore branch selection after layout for clear feedback, without any
+    // colour-changing branch highlight.
     diagram.clearSelection();
+
     roots.forEach((root) => {
       const refreshed = diagram.findNodeForKey(root.key);
       if (!refreshed) return;
 
-      const visit = (current: go.Node): void => {
-        current.isSelected = true;
-        current.findNodesOutOf().each((child) => visit(child));
-      };
-
-      // A moved Gate represents its entire selected subtree; a terminal event
-      // simply selects itself.
       if (refreshed.findLinksOutOf().first()) {
+        const visit = (current: go.Node): void => {
+          current.isSelected = true;
+          current.findNodesOutOf().each((child) => visit(child));
+        };
         visit(refreshed);
       } else {
         refreshed.isSelected = true;
@@ -1162,6 +1250,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     });
 
     this.clearBranchAttachment();
+    return true;
   }
 
   /**
