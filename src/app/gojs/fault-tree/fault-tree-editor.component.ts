@@ -106,13 +106,12 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
     }
 
     depth.forEach((level, node) => {
-      const data = node.data as FaultTreeNodeData;
       const layoutX = node.position.x + xShift;
-      const x = level === 0
-        ? anchor.x
-        : (Number.isFinite(data.manualX) ? data.manualX! : layoutX);
+      const x = level === 0 ? anchor.x : layoutX;
       const y = anchor.y + level * RiskSpectrumLevelLayout.LEVEL_PITCH;
 
+      // Attached nodes use TreeLayout X positions so every component/subtree
+      // occupies a collision-free magnetic slot. Y remains level-locked.
       node.moveTo(x, y);
     });
 
@@ -770,7 +769,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         // RiskSpectrum keeps sibling record boxes very close: about 5-8 px
         // depending on zoom. Seven pixels gives the same compact branch row
         // with our 132 px record boxes.
-        nodeSpacing: 7,
+        nodeSpacing: 14,
 
         // In the reference editor a parent is anchored over the first/leftmost
         // input and additional inputs extend to the right. This also means that
@@ -833,12 +832,12 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     );
 
     diagram.addDiagramListener('SelectionMoved', () => {
-      this.persistManualPlacement(diagram);
+      this.finalizeMagneticPlacement(diagram);
     });
 
     diagram.addDiagramListener('ExternalObjectsDropped', () => {
       this.autoConnectDroppedNodes(diagram);
-      this.persistManualPlacement(diagram);
+      this.finalizeMagneticPlacement(diagram);
     });
 
     this.diagram = diagram;
@@ -1044,8 +1043,12 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     this.model.links.push({ ...linkData });
 
-    // Re-run the fixed-level layout: the node keeps its horizontal placement,
-    // but its Y position snaps to the branch's next logical level.
+    // The free node's current X determines the insertion slot between existing
+    // siblings. TreeLayout then resolves exact collision-free coordinates.
+    diagram.startTransaction('Insert attached node into magnetic slot');
+    this.reorderChildrenByCurrentX(diagram, parent);
+    diagram.commitTransaction('Insert attached node into magnetic slot');
+
     diagram.layoutDiagram(true);
 
     // One branch click attaches one component. The user must explicitly choose
@@ -1141,39 +1144,127 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   }
 
   /**
-   * Persist manual placement so a later TreeLayout pass does not erase it.
-   * Linked nodes persist X only; unattached nodes persist both X and Y.
+   * Finalize a drag using "magnetic plate" semantics.
+   *
+   * - free/unattached components keep their exact X/Y workspace position;
+   * - attached components do not keep arbitrary pixels: their drag only
+   *   determines the sibling/subtree ordering;
+   * - TreeLayout then recomputes collision-free X slots for all affected
+   *   branches while RiskSpectrumLevelLayout preserves fixed Y levels.
    */
-  private persistManualPlacement(diagram: go.Diagram): void {
+  private finalizeMagneticPlacement(diagram: go.Diagram): void {
     const graphModel = diagram.model as go.GraphLinksModel;
-
-    diagram.startTransaction('Persist fault-tree placement');
+    const affectedParents = new Map<go.Key, go.Node>();
 
     diagram.selection.each((part) => {
       if (!(part instanceof go.Node)) return;
 
       const data = part.data as FaultTreeNodeData;
-
       if (data.category === 'TOP_EVENT') return;
 
-      const attached = Boolean(part.findLinksInto().first());
+      const incoming = part.findLinksInto().first();
+      const parent = incoming?.fromNode ?? null;
 
-      graphModel.setDataProperty(data, 'manualX', part.position.x);
-
-      if (attached) {
-        graphModel.setDataProperty(data, 'manualY', undefined);
-      } else {
+      if (!parent) {
+        // Free workspace object: preserve exact placement.
+        graphModel.startTransaction('Persist free FT node placement');
+        graphModel.setDataProperty(data, 'manualX', part.position.x);
         graphModel.setDataProperty(data, 'manualY', part.position.y);
+        graphModel.commitTransaction('Persist free FT node placement');
+
+        const source = this.model.nodes.find((node) => node.key === data.key);
+        if (source) {
+          source.manualX = part.position.x;
+          source.manualY = part.position.y;
+        }
+        return;
       }
 
-      const source = this.model.nodes.find((node) => node.key === data.key);
-      if (source) {
-        source.manualX = part.position.x;
-        source.manualY = attached ? undefined : part.position.y;
+      // For a whole selected branch, only the branch root should reorder among
+      // its siblings. Descendants whose parent is also selected keep their
+      // internal order.
+      if (!parent.isSelected) {
+        affectedParents.set(parent.key, parent);
       }
     });
 
-    diagram.commitTransaction('Persist fault-tree placement');
+    if (!affectedParents.size) return;
+
+    diagram.startTransaction('Reorder magnetic FT slots');
+
+    affectedParents.forEach((parent) => {
+      this.reorderChildrenByCurrentX(diagram, parent);
+    });
+
+    diagram.commitTransaction('Reorder magnetic FT slots');
+
+    diagram.layoutDiagram(true);
+  }
+
+  /**
+   * Reorder the parent's outgoing links according to the current horizontal
+   * centers of its children. TreeLayout uses this order to allocate
+   * non-overlapping sibling/subtree slots.
+   */
+  private reorderChildrenByCurrentX(diagram: go.Diagram, parent: go.Node): void {
+    const graphModel = diagram.model as go.GraphLinksModel;
+
+    const outgoingLinks: go.Link[] = [];
+    parent.findLinksOutOf().each((link) => outgoingLinks.push(link));
+
+    if (outgoingLinks.length < 2) return;
+
+    const sortedLinks = [...outgoingLinks].sort((a, b) => {
+      const ax = a.toNode?.actualBounds.center.x ?? 0;
+      const bx = b.toNode?.actualBounds.center.x ?? 0;
+      return ax - bx;
+    });
+
+    const existingKeys = outgoingLinks.map((link) => String(link.data.key));
+    const sortedKeys = sortedLinks.map((link) => String(link.data.key));
+
+    if (existingKeys.every((key, index) => key === sortedKeys[index])) return;
+
+    const sortedData = sortedLinks.map((link) => link.data);
+
+    // Removing/re-adding only this parent's links changes the traversal order
+    // used by TreeLayout without changing the logical relations themselves.
+    outgoingLinks.forEach((link) => graphModel.removeLinkData(link.data));
+    sortedData.forEach((linkData) => graphModel.addLinkData(linkData));
+
+    // Keep the Angular-side source model in the same sibling order so a later
+    // component refresh preserves the magnetic arrangement.
+    const sourceIndices: number[] = [];
+    this.model.links.forEach((link, index) => {
+      if (String(link.from) === String(parent.key)) sourceIndices.push(index);
+    });
+
+    const sourceSorted = sortedKeys.flatMap((key) => {
+      const found = this.model.links.find((link) => String(link.key) === key);
+      return found ? [found] : [];
+    });
+
+    sourceIndices.forEach((sourceIndex, index) => {
+      const replacement = sourceSorted[index];
+      if (replacement) this.model.links[sourceIndex] = replacement;
+    });
+
+    // Any old manual X on attached children belongs to the former free-pixel
+    // behavior. Clear it so layout slots always win.
+    sortedLinks.forEach((link) => {
+      const child = link.toNode;
+      if (!child) return;
+
+      const data = child.data as FaultTreeNodeData;
+      graphModel.setDataProperty(data, 'manualX', undefined);
+      graphModel.setDataProperty(data, 'manualY', undefined);
+
+      const source = this.model.nodes.find((node) => node.key === data.key);
+      if (source) {
+        source.manualX = undefined;
+        source.manualY = undefined;
+      }
+    });
   }
 
   /**

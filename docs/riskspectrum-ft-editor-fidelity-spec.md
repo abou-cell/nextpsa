@@ -252,3 +252,39 @@ The UI helper displays:
 `Branch: <parent-id> -> click a free component`
 
 while this mode is armed.
+
+
+## Magnetic horizontal slots and collision avoidance
+
+Attached components and attached FT subtrees use magnetic horizontal slots rather than arbitrary pixel X positions.
+
+Behavior:
+
+- no attached record boxes or attached subtrees may overlap;
+- dragging an attached leaf horizontally determines its new sibling order;
+- dropping it between two siblings inserts it into that position;
+- dragging a complete selected branch determines the new sibling order of the branch root;
+- TreeLayout recalculates the exact X coordinates for all sibling subtrees;
+- fixed logical Y levels remain unchanged;
+- the moved item/subtree occupies a valid collision-free slot;
+- neighbouring siblings shift automatically to make room;
+- attached components do not persist arbitrary manual X coordinates anymore;
+- unattached/free workspace components still keep free X/Y placement.
+
+Example:
+
+Before:
+
+```
+A    B    C    D
+```
+
+Drag D between B and C:
+
+```
+A    B    D    C
+```
+
+For a selected subtree, the entire subtree is treated as one horizontal unit for sibling ordering. The layout keeps its descendants collision-free with neighbouring subtrees.
+
+When an existing free component is attached to a selected branch, its current X position is used to determine the nearest insertion slot before the layout runs.
