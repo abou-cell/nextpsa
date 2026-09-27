@@ -313,3 +313,27 @@ Rules:
 - if a component is already a child of the target parent, dropping it on that parent's branch moves it to the last/rightmost position;
 - the target branch has a wider invisible hit area for easier drop interaction while retaining the thin RiskSpectrum visual line;
 - the new relation keeps the moved root's previous negation flag when applicable.
+
+
+## Cross-level transfer to another branch
+
+This operation is intentionally different from ordinary lateral magnetic reordering.
+
+### Ordinary lateral movement
+- attached component/subtree stays on the same logical level;
+- drop is interpreted only as sibling ordering;
+- TreeLayout snaps back to the fixed Y level.
+
+### Transfer to another branch
+- during the drag, the selected component or complete selected subtree may move freely in X and Y;
+- source and target branches may be on completely different logical levels;
+- on mouse release, NextPSA searches near the actual cursor position for the nearest branch line;
+- the branch is valid only if its source node is a Gate or Top Event with an OUT port;
+- no branch highlight, blue overlay, enlarged visible stroke or other colour feedback is shown;
+- the previous incoming relation of the moved root is removed;
+- a new `targetParent.OUT -> movedRoot.IN` relation is created;
+- the moved component/subtree is appended after the target parent's existing children;
+- descendants of a moved subtree remain unchanged;
+- after logical reparenting, fixed levels are recalculated from the new parent depth.
+
+A Gate with descendants must be moved only after **Select branch** has selected the complete subtree. A terminal component may be moved directly. Cycles are rejected.
