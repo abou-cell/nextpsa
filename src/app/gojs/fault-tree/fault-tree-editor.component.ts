@@ -1239,9 +1239,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       if (String(link.from) === String(parent.key)) sourceIndices.push(index);
     });
 
-    const sourceSorted = sortedKeys
-      .map((key) => this.model.links.find((link) => String(link.key) === key))
-      .filter((link): link is NonNullable<typeof link> => Boolean(link));
+    const sourceSorted = sortedKeys.flatMap((key) => {
+      const found = this.model.links.find((link) => String(link.key) === key);
+      return found ? [found] : [];
+    });
 
     sourceIndices.forEach((sourceIndex, index) => {
       const replacement = sourceSorted[index];
