@@ -204,8 +204,14 @@ class RiskSpectrumBranchLink extends go.Link {
           </div>
 
           <div class="palette-toolbar-right">
-            <span [class.armed-parent]="!!insertionParentId">
-              {{ insertionParentId ? ('Parent: ' + insertionParentId + ' → click a symbol') : 'Select a Gate, then click a symbol' }}
+            <span [class.armed-parent]="!!insertionParentId || !!branchAttachParentId">
+              {{
+                branchAttachParentId
+                  ? ('Branch: ' + branchAttachParentId + ' → click a free component')
+                  : insertionParentId
+                    ? ('Parent: ' + insertionParentId + ' → click a symbol')
+                    : 'Select a Gate, then click a symbol'
+              }}
             </span>
           </div>
         </div>
@@ -328,6 +334,11 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   // when the user clicks the separate GoJS Palette diagram.
   private insertionParentKey: go.Key | null = null;
   insertionParentId: string | null = null;
+
+  // Existing free-node attachment mode:
+  // click a branch link, then click an unattached component.
+  private branchAttachParentKey: go.Key | null = null;
+  branchAttachParentId: string | null = null;
 
   zoomPercent = 100;
 
@@ -585,6 +596,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           }
         });
       },
+      click: (_event, node) => {
+        this.tryAttachExistingNodeToSelectedBranch(node as go.Node);
+      },
       doubleClick: (_event, node) => {
         this.zone.run(() => this.recordOpen.emit((node as go.Node).data as FaultTreeNodeData));
       }
@@ -788,7 +802,12 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       $(RiskSpectrumBranchLink, {
           selectable: true,
           relinkableFrom: false,
-          relinkableTo: false
+          relinkableTo: false,
+          click: (_event: go.InputEvent, obj: go.GraphObject) => {
+            if (obj.part instanceof go.Link) {
+              this.armBranchAttachment(obj.part);
+            }
+          }
         },
         $(go.Shape, {
           stroke: '#111111',
@@ -938,6 +957,126 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     palette.model = paletteModel;
 
     this.palette = palette;
+  }
+
+  /**
+   * Arm an existing logical branch for attaching one free component.
+   *
+   * Selecting any visible branch segment means: use the source Gate / Top Event
+   * of that Link as the logical parent. The next click on an unattached component
+   * creates a new sibling relation from parent.OUT to component.IN.
+   */
+  private armBranchAttachment(link: go.Link): void {
+    const parent = link.fromNode;
+    if (!parent) return;
+
+    const data = parent.data as FaultTreeNodeData;
+    if (data.category !== 'TOP_EVENT' && data.category !== 'GATE') return;
+
+    this.zone.run(() => {
+      this.branchAttachParentKey = parent.key;
+      this.branchAttachParentId = data.id;
+
+      // This is an attachment workflow, not palette insertion.
+      this.insertionParentKey = null;
+      this.insertionParentId = null;
+    });
+  }
+
+  private tryAttachExistingNodeToSelectedBranch(node: go.Node): void {
+    if (this.branchAttachParentKey === null) return;
+
+    const diagram = node.diagram;
+    if (!diagram) return;
+
+    const childData = node.data as FaultTreeNodeData;
+
+    if (childData.category === 'TOP_EVENT') return;
+
+    // Only a free/unattached component can be attached by this workflow.
+    if (node.findLinksInto().first()) return;
+
+    const parent = diagram.findNodeForKey(this.branchAttachParentKey);
+    if (!parent || parent === node) {
+      this.clearBranchAttachment();
+      return;
+    }
+
+    const parentData = parent.data as FaultTreeNodeData;
+    if (parentData.category !== 'TOP_EVENT' && parentData.category !== 'GATE') {
+      this.clearBranchAttachment();
+      return;
+    }
+
+    // Prevent accidental cycles when a free Gate already owns descendants.
+    if (this.nodeCanReach(node, parent)) {
+      this.clearBranchAttachment();
+      return;
+    }
+
+    const graphModel = diagram.model as go.GraphLinksModel;
+    const linkKey =
+      `ATTACH-${String(parent.key)}-${String(node.key)}-${graphModel.linkDataArray.length + 1}`;
+
+    diagram.startTransaction('Attach free component to selected branch');
+
+    graphModel.setDataProperty(childData, 'manualX', node.position.x);
+    graphModel.setDataProperty(childData, 'manualY', undefined);
+
+    const linkData = {
+      key: linkKey,
+      from: String(parent.key),
+      to: String(node.key),
+      fromPort: 'OUT' as const,
+      toPort: 'IN' as const,
+      negated: false
+    };
+
+    graphModel.addLinkData(linkData);
+
+    diagram.commitTransaction('Attach free component to selected branch');
+
+    const sourceNode = this.model.nodes.find((candidate) => candidate.key === childData.key);
+    if (sourceNode) {
+      sourceNode.manualX = node.position.x;
+      sourceNode.manualY = undefined;
+    }
+
+    this.model.links.push({ ...linkData });
+
+    // Re-run the fixed-level layout: the node keeps its horizontal placement,
+    // but its Y position snaps to the branch's next logical level.
+    diagram.layoutDiagram(true);
+
+    // One branch click attaches one component. The user must explicitly choose
+    // the branch again before attaching another free component.
+    this.clearBranchAttachment();
+
+    const refreshed = diagram.findNodeForKey(node.key);
+    if (refreshed) diagram.select(refreshed);
+  }
+
+  private nodeCanReach(start: go.Node, target: go.Node): boolean {
+    const visited = new Set<go.Key>();
+    const stack: go.Node[] = [start];
+
+    while (stack.length) {
+      const current = stack.pop()!;
+      if (current === target) return true;
+      if (visited.has(current.key)) continue;
+
+      visited.add(current.key);
+      current.findNodesOutOf().each((child) => stack.push(child));
+    }
+
+    return false;
+  }
+
+  private clearBranchAttachment(): void {
+    this.zone.run(() => {
+      this.branchAttachParentKey = null;
+      this.branchAttachParentId = null;
+    });
   }
 
   /**
@@ -1352,6 +1491,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     this.insertionParentKey = null;
     this.insertionParentId = null;
+    this.branchAttachParentKey = null;
+    this.branchAttachParentId = null;
 
     const model = new go.GraphLinksModel(
       this.model.nodes.map((node) => ({
