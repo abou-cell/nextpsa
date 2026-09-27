@@ -85,6 +85,10 @@ export interface FaultTreeNodeData {
   reliabilityModel?: ReliabilityModelType;
   symbol?: 'CIRCLE' | 'DIAMOND';
   templateCategory?: string;
+  /** User-defined horizontal placement in the FT editor (node position X). */
+  manualX?: number;
+  /** Free placement Y, only used while a node is not attached to a branch. */
+  manualY?: number;
   recordType: 'GAT' | 'BEV' | 'HEV' | 'FTR';
 }
 

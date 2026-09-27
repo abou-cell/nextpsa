@@ -106,10 +106,27 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
     }
 
     depth.forEach((level, node) => {
-      node.moveTo(
-        node.position.x + xShift,
-        anchor.y + level * RiskSpectrumLevelLayout.LEVEL_PITCH
-      );
+      const data = node.data as FaultTreeNodeData;
+      const layoutX = node.position.x + xShift;
+      const x = level === 0
+        ? anchor.x
+        : (Number.isFinite(data.manualX) ? data.manualX! : layoutX);
+      const y = anchor.y + level * RiskSpectrumLevelLayout.LEVEL_PITCH;
+
+      node.moveTo(x, y);
+    });
+
+    // Nodes that are not connected to the Top Event are free objects. TreeLayout
+    // may inspect/place them internally, but their user-defined X/Y position must
+    // be restored whenever a layout is recomputed elsewhere in the tree.
+    diagram.nodes.each((node) => {
+      if (depth.has(node)) return;
+
+      const data = node.data as FaultTreeNodeData;
+
+      if (Number.isFinite(data.manualX) && Number.isFinite(data.manualY)) {
+        node.moveTo(data.manualX!, data.manualY!);
+      }
     });
   }
 }
@@ -537,10 +554,12 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       selectionAdorned: true,
       locationSpot: go.Spot.Center,
 
-      // Once a component belongs to the logical tree its level is controlled
-      // entirely by RiskSpectrumLevelLayout. Users select/edit nodes rather
-      // than freely dragging them off their branch level.
-      movable: false,
+      // Components are draggable, but dragComputation applies RiskSpectrum rules:
+      // free X/Y when unattached, horizontal-only when attached, and whole-branch
+      // movement only after the complete branch has been selected.
+      movable: true,
+      dragComputation: (part, newLoc, snappedLoc) =>
+        this.computeFaultTreeDrag(part, newLoc, snappedLoc),
       selectionChanged: (node) => {
         const data = node.isSelected ? node.data as FaultTreeNodeData : null;
 
@@ -683,9 +702,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         {
           selectionObjectName: 'LABEL',
           contextMenu: gateContextMenu(),
+          movable: !topEvent,
           copyable: !topEvent,
           deletable: !topEvent,
-          cursor: 'default'
+          cursor: topEvent ? 'default' : 'move'
         },
         $(go.Panel, 'Vertical',
           labelPanel(topEvent ? '#d0d0d0' : '#ffffff', '#111111'),
@@ -793,8 +813,13 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       () => this.zone.run(() => this.updateZoomLabel())
     );
 
+    diagram.addDiagramListener('SelectionMoved', () => {
+      this.persistManualPlacement(diagram);
+    });
+
     diagram.addDiagramListener('ExternalObjectsDropped', () => {
       this.autoConnectDroppedNodes(diagram);
+      this.persistManualPlacement(diagram);
     });
 
     this.diagram = diagram;
@@ -913,6 +938,103 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     palette.model = paletteModel;
 
     this.palette = palette;
+  }
+
+  /**
+   * Movement rules:
+   * - Top Event: never moves.
+   * - Unattached component: free X/Y movement.
+   * - Attached leaf / unique component: X movement only, Y remains on its level.
+   * - Attached Gate with descendants: it can only move when its complete branch
+   *   has been selected (Context menu -> Select branch). Then every selected
+   *   branch member moves horizontally together and keeps its own fixed level Y.
+   */
+  private computeFaultTreeDrag(
+    part: go.Part,
+    newLoc: go.Point,
+    snappedLoc: go.Point
+  ): go.Point {
+    if (!(part instanceof go.Node)) return snappedLoc;
+
+    const data = part.data as FaultTreeNodeData;
+
+    if (data.category === 'TOP_EVENT') {
+      return part.location.copy();
+    }
+
+    const attached = Boolean(part.findLinksInto().first());
+
+    if (!attached) {
+      // A node that is not connected to a branch is a free workspace object.
+      return snappedLoc.copy();
+    }
+
+    const hasChildren = Boolean(part.findLinksOutOf().first());
+
+    if (hasChildren && !this.isCompleteBranchSelected(part)) {
+      // A Gate that owns a subtree may not be shifted on its own. Select branch
+      // first so the complete subtree keeps its internal geometry.
+      return part.location.copy();
+    }
+
+    // Attached components keep the exact Y of their RiskSpectrum logical level.
+    return new go.Point(snappedLoc.x, part.location.y);
+  }
+
+  private isCompleteBranchSelected(root: go.Node): boolean {
+    const visited = new Set<go.Key>();
+    const stack: go.Node[] = [root];
+
+    while (stack.length) {
+      const current = stack.pop()!;
+
+      if (visited.has(current.key)) continue;
+      visited.add(current.key);
+
+      if (!current.isSelected) return false;
+
+      current.findNodesOutOf().each((child) => {
+        stack.push(child);
+      });
+    }
+
+    return true;
+  }
+
+  /**
+   * Persist manual placement so a later TreeLayout pass does not erase it.
+   * Linked nodes persist X only; unattached nodes persist both X and Y.
+   */
+  private persistManualPlacement(diagram: go.Diagram): void {
+    const graphModel = diagram.model as go.GraphLinksModel;
+
+    diagram.startTransaction('Persist fault-tree placement');
+
+    diagram.selection.each((part) => {
+      if (!(part instanceof go.Node)) return;
+
+      const data = part.data as FaultTreeNodeData;
+
+      if (data.category === 'TOP_EVENT') return;
+
+      const attached = Boolean(part.findLinksInto().first());
+
+      graphModel.setDataProperty(data, 'manualX', part.position.x);
+
+      if (attached) {
+        graphModel.setDataProperty(data, 'manualY', undefined);
+      } else {
+        graphModel.setDataProperty(data, 'manualY', part.position.y);
+      }
+
+      const source = this.model.nodes.find((node) => node.key === data.key);
+      if (source) {
+        source.manualX = part.position.x;
+        source.manualY = attached ? undefined : part.position.y;
+      }
+    });
+
+    diagram.commitTransaction('Persist fault-tree placement');
   }
 
   /**
