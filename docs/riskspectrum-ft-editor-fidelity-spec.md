@@ -206,3 +206,20 @@ Quick insertion workflow:
 6. the parent stays selected so several children can be added successively.
 
 Terminal events (Basic Event, House Event, Undeveloped Event, Transfer) cannot be used as logical fathers.
+
+
+## Horizontal movement and branch placement
+
+Movement follows the requested RiskSpectrum-style level semantics:
+
+- Top Event remains completely fixed.
+- A component that is not attached to any branch is a free workspace object and may move in both X and Y.
+- From level 2 downward, an attached component remains fixed on its logical Y level but may be repositioned horizontally.
+- A leaf / unique attached component can be moved horizontally on its own.
+- A Gate that owns descendants cannot be moved independently from its subtree.
+- To reposition a whole branch, first use **Select branch**, then drag the selected branch horizontally.
+- During a whole-branch drag, every selected node preserves its own fixed Y level and receives the same horizontal displacement.
+- Manual horizontal placement is persisted and restored after later layout recalculations.
+- Unattached free-node X/Y placement is also persisted.
+
+This keeps the vertical hierarchy invariant while allowing an engineer to arrange branches horizontally like the RiskSpectrum editor.
