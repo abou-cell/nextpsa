@@ -339,6 +339,11 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private branchAttachParentKey: go.Key | null = null;
   branchAttachParentId: string | null = null;
 
+  // A branch drop performs its own explicit sibling ordering. If GoJS emits
+  // SelectionMoved afterwards, skip one magnetic reorder so "append last"
+  // cannot be undone by the dragged X coordinate.
+  private suppressNextMagneticFinalize = false;
+
   zoomPercent = 100;
 
   constructor(private readonly zone: NgZone) {}
@@ -821,6 +826,12 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
             this.moveSelectionToBranchAsLast(diagram, obj.part);
           }
         },
+        // Wide invisible hit target: easier to drop a selected component/subtree
+        // onto a visually thin RiskSpectrum branch.
+        $(go.Shape, {
+          stroke: 'rgba(0,0,0,0.001)',
+          strokeWidth: 14
+        }),
         $(go.Shape,
           {
             stroke: '#111111',
@@ -853,6 +864,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     );
 
     diagram.addDiagramListener('SelectionMoved', () => {
+      if (this.suppressNextMagneticFinalize) {
+        this.suppressNextMagneticFinalize = false;
+        return;
+      }
       this.finalizeMagneticPlacement(diagram);
     });
 
@@ -1108,19 +1123,21 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     preservedTargetData.forEach((linkData) => graphModel.addLinkData(linkData));
 
-    roots.forEach((root, index) => {
+    const movedLinkData = roots.map((root, index) => {
       const previous = removedIncoming.find((entry) => entry.root === root)?.data;
-      const newLinkData = {
-        key: `MOVE-${String(targetParent.key)}-${String(root.key)}-${Date.now()}-${index}`,
+      const serial = ++this.insertionSerial;
+
+      return {
+        key: `MOVE-${String(targetParent.key)}-${String(root.key)}-${serial}-${index}`,
         from: String(targetParent.key),
         to: String(root.key),
         fromPort: 'OUT' as const,
         toPort: 'IN' as const,
         negated: Boolean(previous?.['negated'])
       };
-
-      graphModel.addLinkData(newLinkData);
     });
+
+    movedLinkData.forEach((linkData) => graphModel.addLinkData(linkData));
 
     diagram.commitTransaction('Move selection to branch as last child');
 
@@ -1145,31 +1162,37 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       });
     });
 
-    roots.forEach((root, index) => {
-      const previous = removedIncoming.find((entry) => entry.root === root)?.data;
-
-      this.model.links.push({
-        key: `MOVE-${String(targetParent.key)}-${String(root.key)}-${Date.now()}-${index}`,
-        from: String(targetParent.key),
-        to: String(root.key),
-        fromPort: 'OUT',
-        toPort: 'IN',
-        negated: Boolean(previous?.['negated'])
-      });
+    movedLinkData.forEach((linkData) => {
+      this.model.links.push({ ...linkData });
     });
 
-    // Recompute levels and collision-free magnetic slots.
+    // This explicit drop defines the sibling ordering. Suppress any subsequent
+    // SelectionMoved magnetic reorder that could otherwise put it back according
+    // to the temporary drag X coordinate.
+    this.suppressNextMagneticFinalize = true;
+
+    // Recompute levels and collision-free magnetic slots. Since moved links were
+    // appended after all existing target links, the moved component/branch is the
+    // LAST (rightmost) child of the target branch.
     diagram.layoutDiagram(true);
 
-    // Keep the moved roots/branch selected for immediate visual feedback.
+    // Keep the moved roots/branches selected for immediate visual feedback.
     diagram.clearSelection();
     roots.forEach((root) => {
       const refreshed = diagram.findNodeForKey(root.key);
-      if (refreshed) {
+      if (!refreshed) return;
+
+      const visit = (current: go.Node): void => {
+        current.isSelected = true;
+        current.findNodesOutOf().each((child) => visit(child));
+      };
+
+      // A moved Gate represents its entire selected subtree; a terminal event
+      // simply selects itself.
+      if (refreshed.findLinksOutOf().first()) {
+        visit(refreshed);
+      } else {
         refreshed.isSelected = true;
-        if (this.isCompleteBranchSelected(root)) {
-          // descendants are already selected in the common branch workflow
-        }
       }
     });
 
