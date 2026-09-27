@@ -288,3 +288,28 @@ A    B    D    C
 For a selected subtree, the entire subtree is treated as one horizontal unit for sibling ordering. The layout keeps its descendants collision-free with neighbouring subtrees.
 
 When an existing free component is attached to a selected branch, its current X position is used to determine the nearest insertion slot before the layout runs.
+
+
+## Move a component or selected branch to another branch
+
+A selected component or a complete selected subtree may be reassigned to another Gate branch by drag/drop.
+
+Workflow:
+
+1. select one attached component; or use **Select branch** to select a complete subtree;
+2. drag the selected item/subtree onto the target branch line;
+3. the target branch highlights while it can accept the drop;
+4. on drop, remove the old incoming relation of the moved root;
+5. create `targetParent.OUT -> movedRoot.IN`;
+6. preserve all descendant relations inside the moved subtree;
+7. append the moved root as the **last/rightmost child** of the target parent;
+8. recompute fixed Y levels and magnetic non-overlapping X slots.
+
+Rules:
+
+- a Gate with descendants must have its complete branch selected before it can be reparented;
+- Top Event cannot be moved under another branch;
+- a branch cannot be dropped into itself or one of its descendants;
+- if a component is already a child of the target parent, dropping it on that parent's branch moves it to the last/rightmost position;
+- the target branch has a wider invisible hit area for easier drop interaction while retaining the thin RiskSpectrum visual line;
+- the new relation keeps the moved root's previous negation flag when applicable.

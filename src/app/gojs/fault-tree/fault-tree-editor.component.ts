@@ -339,6 +339,11 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private branchAttachParentKey: go.Key | null = null;
   branchAttachParentId: string | null = null;
 
+  // A branch drop performs its own explicit sibling ordering. If GoJS emits
+  // SelectionMoved afterwards, skip one magnetic reorder so "append last"
+  // cannot be undone by the dragged X coordinate.
+  private suppressNextMagneticFinalize = false;
+
   zoomPercent = 100;
 
   constructor(private readonly zone: NgZone) {}
@@ -806,12 +811,39 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
             if (obj.part instanceof go.Link) {
               this.armBranchAttachment(obj.part);
             }
+          },
+          mouseDragEnter: (_event: go.InputEvent, obj: go.GraphObject) => {
+            if (obj.part instanceof go.Link && this.canDropSelectionOnBranch(diagram, obj.part)) {
+              obj.part.isHighlighted = true;
+            }
+          },
+          mouseDragLeave: (_event: go.InputEvent, obj: go.GraphObject) => {
+            if (obj.part instanceof go.Link) obj.part.isHighlighted = false;
+          },
+          mouseDrop: (_event: go.InputEvent, obj: go.GraphObject) => {
+            if (!(obj.part instanceof go.Link)) return;
+            obj.part.isHighlighted = false;
+            this.moveSelectionToBranchAsLast(diagram, obj.part);
           }
         },
+        // Wide invisible hit target: easier to drop a selected component/subtree
+        // onto a visually thin RiskSpectrum branch.
         $(go.Shape, {
-          stroke: '#111111',
-          strokeWidth: 1.05
+          stroke: 'rgba(0,0,0,0.001)',
+          strokeWidth: 14
         }),
+        $(go.Shape,
+          {
+            stroke: '#111111',
+            strokeWidth: 1.05
+          },
+          new go.Binding('stroke', 'isHighlighted', (highlighted: boolean) =>
+            highlighted ? '#0f5bd8' : '#111111'
+          ).ofObject(),
+          new go.Binding('strokeWidth', 'isHighlighted', (highlighted: boolean) =>
+            highlighted ? 2.2 : 1.05
+          ).ofObject()
+        ),
         $(go.Shape, {
             segmentIndex: -1,
             segmentFraction: 0.5,
@@ -832,6 +864,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     );
 
     diagram.addDiagramListener('SelectionMoved', () => {
+      if (this.suppressNextMagneticFinalize) {
+        this.suppressNextMagneticFinalize = false;
+        return;
+      }
       this.finalizeMagneticPlacement(diagram);
     });
 
@@ -956,6 +992,211 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     palette.model = paletteModel;
 
     this.palette = palette;
+  }
+
+  /**
+   * Returns the roots of the current selected move set.
+   *
+   * For a selected branch, descendants whose parent is also selected are not
+   * considered roots: the whole subtree travels under its selected branch root.
+   * For one selected component, that component is the only root.
+   */
+  private selectedMoveRoots(diagram: go.Diagram): go.Node[] {
+    const selectedNodes: go.Node[] = [];
+
+    diagram.selection.each((part) => {
+      if (part instanceof go.Node) selectedNodes.push(part);
+    });
+
+    return selectedNodes.filter((node) => {
+      const incoming = node.findLinksInto().first();
+      const parent = incoming?.fromNode ?? null;
+      return !parent || !parent.isSelected;
+    });
+  }
+
+  private canDropSelectionOnBranch(diagram: go.Diagram, targetLink: go.Link): boolean {
+    const targetParent = targetLink.fromNode;
+    if (!targetParent) return false;
+
+    const targetData = targetParent.data as FaultTreeNodeData;
+    if (targetData.category !== 'TOP_EVENT' && targetData.category !== 'GATE') return false;
+
+    const roots = this.selectedMoveRoots(diagram)
+      .filter((node) => (node.data as FaultTreeNodeData).category !== 'TOP_EVENT');
+
+    if (!roots.length) return false;
+
+    for (const root of roots) {
+      // Never move a partial subtree by accident. If the root owns descendants,
+      // the complete branch must first be selected.
+      if (root.findLinksOutOf().first() && !this.isCompleteBranchSelected(root)) {
+        return false;
+      }
+
+      if (root === targetParent) return false;
+
+      // Reject target parent inside the moved subtree: this would create a cycle.
+      if (this.nodeCanReach(root, targetParent)) return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Move the selected component or complete selected branch to the target
+   * branch and append it as the LAST child of that branch.
+   *
+   * Logical behavior:
+   * - remove each move-root's previous incoming relation, if any;
+   * - preserve its subtree;
+   * - create targetParent.OUT -> root.IN;
+   * - append the new relation after all current target-parent children;
+   * - re-layout to fixed RiskSpectrum levels / magnetic non-overlapping slots.
+   */
+  private moveSelectionToBranchAsLast(
+    diagram: go.Diagram,
+    targetLink: go.Link
+  ): void {
+    if (!this.canDropSelectionOnBranch(diagram, targetLink)) return;
+
+    const targetParent = targetLink.fromNode;
+    if (!targetParent) return;
+
+    const roots = this.selectedMoveRoots(diagram)
+      .filter((node) => (node.data as FaultTreeNodeData).category !== 'TOP_EVENT')
+      .sort((a, b) => a.actualBounds.center.x - b.actualBounds.center.x);
+
+    if (!roots.length) return;
+
+    const graphModel = diagram.model as go.GraphLinksModel;
+
+    // Snapshot existing target children in their current visual order.
+    const targetLinksBefore: go.Link[] = [];
+    targetParent.findLinksOutOf().each((link) => targetLinksBefore.push(link));
+    targetLinksBefore.sort((a, b) => {
+      const ax = a.toNode?.actualBounds.center.x ?? 0;
+      const bx = b.toNode?.actualBounds.center.x ?? 0;
+      return ax - bx;
+    });
+
+    const movedRootKeys = new Set(roots.map((root) => String(root.key)));
+
+    const preservedTargetData = targetLinksBefore
+      .filter((link) => !movedRootKeys.has(String(link.toNode?.key)))
+      .map((link) => ({ ...link.data }));
+
+    const removedIncoming: Array<{
+      root: go.Node;
+      data: Record<string, unknown>;
+    }> = [];
+
+    diagram.startTransaction('Move selection to branch as last child');
+
+    for (const root of roots) {
+      const incoming = root.findLinksInto().first();
+
+      if (incoming) {
+        removedIncoming.push({
+          root,
+          data: { ...(incoming.data as Record<string, unknown>) }
+        });
+        graphModel.removeLinkData(incoming.data);
+      }
+
+      const rootData = root.data as FaultTreeNodeData;
+      graphModel.setDataProperty(rootData, 'manualX', undefined);
+      graphModel.setDataProperty(rootData, 'manualY', undefined);
+
+      const sourceNode = this.model.nodes.find((node) => node.key === rootData.key);
+      if (sourceNode) {
+        sourceNode.manualX = undefined;
+        sourceNode.manualY = undefined;
+      }
+    }
+
+    // Rebuild target-parent outgoing link order explicitly:
+    // existing target children first, moved roots last.
+    const currentTargetLinks: go.Link[] = [];
+    targetParent.findLinksOutOf().each((link) => currentTargetLinks.push(link));
+    currentTargetLinks.forEach((link) => graphModel.removeLinkData(link.data));
+
+    preservedTargetData.forEach((linkData) => graphModel.addLinkData(linkData));
+
+    const movedLinkData = roots.map((root, index) => {
+      const previous = removedIncoming.find((entry) => entry.root === root)?.data;
+      const serial = ++this.insertionSerial;
+
+      return {
+        key: `MOVE-${String(targetParent.key)}-${String(root.key)}-${serial}-${index}`,
+        from: String(targetParent.key),
+        to: String(root.key),
+        fromPort: 'OUT' as const,
+        toPort: 'IN' as const,
+        negated: Boolean(previous?.['negated'])
+      };
+    });
+
+    movedLinkData.forEach((linkData) => graphModel.addLinkData(linkData));
+
+    diagram.commitTransaction('Move selection to branch as last child');
+
+    // Keep the Angular-side source model synchronized with GoJS.
+    const movedKeys = new Set(roots.map((root) => String(root.key)));
+    const targetParentKey = String(targetParent.key);
+
+    this.model.links = this.model.links.filter((link) => {
+      if (movedKeys.has(String(link.to))) return false;
+      if (String(link.from) === targetParentKey) return false;
+      return true;
+    });
+
+    preservedTargetData.forEach((linkData) => {
+      this.model.links.push({
+        key: String(linkData['key']),
+        from: String(linkData['from']),
+        to: String(linkData['to']),
+        fromPort: 'OUT',
+        toPort: 'IN',
+        negated: Boolean(linkData['negated'])
+      });
+    });
+
+    movedLinkData.forEach((linkData) => {
+      this.model.links.push({ ...linkData });
+    });
+
+    // This explicit drop defines the sibling ordering. Suppress any subsequent
+    // SelectionMoved magnetic reorder that could otherwise put it back according
+    // to the temporary drag X coordinate.
+    this.suppressNextMagneticFinalize = true;
+
+    // Recompute levels and collision-free magnetic slots. Since moved links were
+    // appended after all existing target links, the moved component/branch is the
+    // LAST (rightmost) child of the target branch.
+    diagram.layoutDiagram(true);
+
+    // Keep the moved roots/branches selected for immediate visual feedback.
+    diagram.clearSelection();
+    roots.forEach((root) => {
+      const refreshed = diagram.findNodeForKey(root.key);
+      if (!refreshed) return;
+
+      const visit = (current: go.Node): void => {
+        current.isSelected = true;
+        current.findNodesOutOf().each((child) => visit(child));
+      };
+
+      // A moved Gate represents its entire selected subtree; a terminal event
+      // simply selects itself.
+      if (refreshed.findLinksOutOf().first()) {
+        visit(refreshed);
+      } else {
+        refreshed.isSelected = true;
+      }
+    });
+
+    this.clearBranchAttachment();
   }
 
   /**
