@@ -339,11 +339,6 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private branchAttachParentKey: go.Key | null = null;
   branchAttachParentId: string | null = null;
 
-  // A branch drop performs its own explicit sibling ordering. If GoJS emits
-  // SelectionMoved afterwards, skip one magnetic reorder so "append last"
-  // cannot be undone by the dragged X coordinate.
-  private suppressNextMagneticFinalize = false;
-
   zoomPercent = 100;
 
   constructor(private readonly zone: NgZone) {}
@@ -811,39 +806,12 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
             if (obj.part instanceof go.Link) {
               this.armBranchAttachment(obj.part);
             }
-          },
-          mouseDragEnter: (_event: go.InputEvent, obj: go.GraphObject) => {
-            if (obj.part instanceof go.Link && this.canDropSelectionOnBranch(diagram, obj.part)) {
-              obj.part.isHighlighted = true;
-            }
-          },
-          mouseDragLeave: (_event: go.InputEvent, obj: go.GraphObject) => {
-            if (obj.part instanceof go.Link) obj.part.isHighlighted = false;
-          },
-          mouseDrop: (_event: go.InputEvent, obj: go.GraphObject) => {
-            if (!(obj.part instanceof go.Link)) return;
-            obj.part.isHighlighted = false;
-            this.moveSelectionToBranchAsLast(diagram, obj.part);
           }
         },
-        // Wide invisible hit target: easier to drop a selected component/subtree
-        // onto a visually thin RiskSpectrum branch.
         $(go.Shape, {
-          stroke: 'rgba(0,0,0,0.001)',
-          strokeWidth: 14
+          stroke: '#111111',
+          strokeWidth: 1.05
         }),
-        $(go.Shape,
-          {
-            stroke: '#111111',
-            strokeWidth: 1.05
-          },
-          new go.Binding('stroke', 'isHighlighted', (highlighted: boolean) =>
-            highlighted ? '#0f5bd8' : '#111111'
-          ).ofObject(),
-          new go.Binding('strokeWidth', 'isHighlighted', (highlighted: boolean) =>
-            highlighted ? 2.2 : 1.05
-          ).ofObject()
-        ),
         $(go.Shape, {
             segmentIndex: -1,
             segmentFraction: 0.5,
@@ -864,10 +832,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     );
 
     diagram.addDiagramListener('SelectionMoved', () => {
-      if (this.suppressNextMagneticFinalize) {
-        this.suppressNextMagneticFinalize = false;
-        return;
-      }
+      if (this.tryReparentSelectionAtDrop(diagram)) return;
       this.finalizeMagneticPlacement(diagram);
     });
 
@@ -1360,8 +1325,11 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       return part.location.copy();
     }
 
-    // Attached components keep the exact Y of their RiskSpectrum logical level.
-    return new go.Point(snappedLoc.x, part.location.y);
+    // During an active drag, an attached component / fully selected subtree
+    // may move freely across levels so it can be dropped onto another branch.
+    // If no valid target branch is found at drop time, finalizeMagneticPlacement
+    // restores the original logical Y level and only keeps horizontal ordering.
+    return snappedLoc.copy();
   }
 
   private isCompleteBranchSelected(root: go.Node): boolean {
