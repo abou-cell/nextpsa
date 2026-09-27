@@ -223,3 +223,32 @@ Movement follows the requested RiskSpectrum-style level semantics:
 - Unattached free-node X/Y placement is also persisted.
 
 This keeps the vertical hierarchy invariant while allowing an engineer to arrange branches horizontally like the RiskSpectrum editor.
+
+
+## Attach an existing free component to a branch
+
+A component that already exists in the FT workspace but is not yet connected can be attached with a two-click workflow:
+
+1. click/select the target branch;
+2. NextPSA stores the source Gate / Top Event of that branch as the logical parent;
+3. click the free component;
+4. create `parent.OUT -> component.IN`;
+5. preserve the component's horizontal X placement;
+6. snap only its Y coordinate to the next fixed logical level;
+7. clear the armed branch after one successful attachment.
+
+Rules:
+
+- only an unattached component can be attached;
+- Top Event cannot be attached as a child;
+- terminal events remain terminal;
+- a free Gate with its own descendants may be attached as a complete subtree;
+- cycle creation is rejected;
+- clicking an already attached component does not create a second incoming relation;
+- selecting a branch is different from selecting a Gate for palette insertion.
+
+The UI helper displays:
+
+`Branch: <parent-id> -> click a free component`
+
+while this mode is armed.
