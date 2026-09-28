@@ -377,3 +377,33 @@ Therefore a newly created palette component placed under/onto the output of a Ga
 `Gate.OUT -> NewComponent.IN`
 
 The new node receives a unique FT-position key and is persisted in the Angular-side model, so later move/reparent operations work identically to pre-existing model nodes.
+
+
+## Drop selected component or branch on a Gate at any level
+
+A selected FT component or a complete selected subtree may be reparented by dragging it directly onto a Gate / Top Event, regardless of whether the target is at a higher or lower logical level.
+
+Accepted targets:
+
+- the visible Gate / Top Event node itself;
+- the invisible `OUT` port;
+- the short virtual output stem below the Gate;
+- an existing outgoing RiskSpectrum branch.
+
+Selection rules:
+
+- terminal component: may be moved directly;
+- Gate with descendants: use **Select branch** first so the complete subtree is selected;
+- Top Event itself cannot become a child;
+- cycles are rejected.
+
+After a successful drop:
+
+1. remove the moved root's previous incoming relation;
+2. create `targetGate.OUT -> movedRoot.IN`;
+3. preserve all descendants of the moved subtree;
+4. append it after the target Gate's existing children;
+5. recompute the moved subtree's logical depth and fixed Y levels from the new parent;
+6. recompute magnetic X slots to prevent overlap.
+
+No source/target level restriction is applied. A component from a lower level can be moved to a higher-level Gate and vice versa, provided the new relation is acyclic.
