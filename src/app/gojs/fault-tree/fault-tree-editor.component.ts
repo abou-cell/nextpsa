@@ -776,6 +776,12 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         // inserting another BE keeps the branch datum stable.
         alignment: go.TreeAlignment.Start,
         compaction: go.TreeCompaction.Block,
+        sorting: go.TreeSorting.Ascending,
+        comparer: (a: go.TreeVertex, b: go.TreeVertex) => {
+          const ao = Number((a.node?.data as FaultTreeNodeData | undefined)?.siblingOrder ?? 0);
+          const bo = Number((b.node?.data as FaultTreeNodeData | undefined)?.siblingOrder ?? 0);
+          return ao - bo;
+        },
 
         // Preserve the explicit IN/OUT spots used by the fixed branch router.
         setsPortSpot: false,
@@ -1004,6 +1010,18 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         return false;
       }
     }
+
+    // A mostly-horizontal drag on the current logical level is a sibling reorder,
+    // not a reparent operation.
+    const sameLevelMove = roots.every((root) => {
+      const incoming = root.findLinksInto().first();
+      const parent = incoming?.fromNode ?? null;
+      if (!parent) return false;
+      const expectedY = parent.position.y + RiskSpectrumLevelLayout.LEVEL_PITCH;
+      return Math.abs(root.position.y - expectedY) <= 42;
+    });
+
+    if (sameLevelMove) return false;
 
     const dropPoint = diagram.lastInput.documentPoint;
     const targetParent = this.findNearestValidTargetParent(
@@ -1806,59 +1824,21 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
    */
   private reorderChildrenByCurrentX(diagram: go.Diagram, parent: go.Node): void {
     const graphModel = diagram.model as go.GraphLinksModel;
+    const children: go.Node[] = [];
+    parent.findNodesOutOf().each((child) => children.push(child));
+    if (children.length < 2) return;
 
-    const outgoingLinks: go.Link[] = [];
-    parent.findLinksOutOf().each((link) => outgoingLinks.push(link));
+    children.sort((a, b) => a.actualBounds.center.x - b.actualBounds.center.x);
 
-    if (outgoingLinks.length < 2) return;
-
-    const sortedLinks = [...outgoingLinks].sort((a, b) => {
-      const ax = a.toNode?.actualBounds.center.x ?? 0;
-      const bx = b.toNode?.actualBounds.center.x ?? 0;
-      return ax - bx;
-    });
-
-    const existingKeys = outgoingLinks.map((link) => String(link.data.key));
-    const sortedKeys = sortedLinks.map((link) => String(link.data.key));
-
-    if (existingKeys.every((key, index) => key === sortedKeys[index])) return;
-
-    const sortedData = sortedLinks.map((link) => link.data);
-
-    // Removing/re-adding only this parent's links changes the traversal order
-    // used by TreeLayout without changing the logical relations themselves.
-    outgoingLinks.forEach((link) => graphModel.removeLinkData(link.data));
-    sortedData.forEach((linkData) => graphModel.addLinkData(linkData));
-
-    // Keep the Angular-side source model in the same sibling order so a later
-    // component refresh preserves the magnetic arrangement.
-    const sourceIndices: number[] = [];
-    this.model.links.forEach((link, index) => {
-      if (String(link.from) === String(parent.key)) sourceIndices.push(index);
-    });
-
-    const sourceSorted = sortedKeys.flatMap((key) => {
-      const found = this.model.links.find((link) => String(link.key) === key);
-      return found ? [found] : [];
-    });
-
-    sourceIndices.forEach((sourceIndex, index) => {
-      const replacement = sourceSorted[index];
-      if (replacement) this.model.links[sourceIndex] = replacement;
-    });
-
-    // Any old manual X on attached children belongs to the former free-pixel
-    // behavior. Clear it so layout slots always win.
-    sortedLinks.forEach((link) => {
-      const child = link.toNode;
-      if (!child) return;
-
+    children.forEach((child, index) => {
       const data = child.data as FaultTreeNodeData;
+      graphModel.setDataProperty(data, 'siblingOrder', index);
       graphModel.setDataProperty(data, 'manualX', undefined);
       graphModel.setDataProperty(data, 'manualY', undefined);
 
       const source = this.model.nodes.find((node) => node.key === data.key);
       if (source) {
+        source.siblingOrder = index;
         source.manualX = undefined;
         source.manualY = undefined;
       }
@@ -2245,13 +2225,23 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     this.branchAttachParentKey = null;
     this.branchAttachParentId = null;
 
+    const siblingOrderByKey = new Map<string, number>();
+    const parentCounts = new Map<string, number>();
+    this.model.links.forEach((link) => {
+      const parentKey = String(link.from);
+      const index = parentCounts.get(parentKey) ?? 0;
+      siblingOrderByKey.set(String(link.to), index);
+      parentCounts.set(parentKey, index + 1);
+    });
+
     const model = new go.GraphLinksModel(
       this.model.nodes.map((node) => ({
         ...node,
         symbol: node.category === 'BASIC_EVENT'
           ? (node.symbol ?? 'CIRCLE')
           : node.symbol,
-        templateCategory: this.resolveTemplateCategory(node)
+        templateCategory: this.resolveTemplateCategory(node),
+        siblingOrder: node.siblingOrder ?? siblingOrderByKey.get(String(node.key)) ?? 0
       })),
       this.model.links.map((link) => ({
         ...link,
