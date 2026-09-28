@@ -817,19 +817,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         $(go.Shape, {
           stroke: '#111111',
           strokeWidth: 1.05
-        }),
-        $(go.Shape, {
-            segmentIndex: -1,
-            segmentFraction: 0.5,
-            width: 8,
-            height: 8,
-            figure: 'Circle',
-            fill: '#ffffff',
-            stroke: '#111111',
-            strokeWidth: 1.05
-          },
-          new go.Binding('visible', 'negated', Boolean)
-        )
+        })
       );
 
     diagram.addDiagramListener(
