@@ -337,3 +337,22 @@ This operation is intentionally different from ordinary lateral magnetic reorder
 - after logical reparenting, fixed levels are recalculated from the new parent depth.
 
 A Gate with descendants must be moved only after **Select branch** has selected the complete subtree. A terminal component may be moved directly. Cycles are rejected.
+
+
+## Detached component branch snap
+
+A detached/free FT component can be attached by physically moving the component box onto a valid FT branch.
+
+Important detection rule:
+
+- attachment is determined primarily from the moved component/root bounding box intersecting or approaching a branch;
+- the mouse cursor position is only a secondary fallback;
+- therefore dropping a large record box across a thin RiskSpectrum branch still attaches correctly even when the pointer is near the center of the box.
+
+After attachment:
+
+- create `targetParent.OUT -> component.IN`;
+- clear free-node Y placement;
+- preserve logical subtree contents if the moved root is a Gate;
+- recalculate the component's fixed level from the new parent;
+- preserve normal magnetic non-overlap behavior.
