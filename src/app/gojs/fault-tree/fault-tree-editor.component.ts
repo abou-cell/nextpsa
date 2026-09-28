@@ -1047,6 +1047,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   ): go.Node | null {
     const scale = Math.max(0.35, diagram.scale);
     const nodeTolerance = 18 / scale;
+    const gateTolerance = 16 / scale;
     const pointerTolerance = 24 / scale;
 
     let bestParent: go.Node | null = null;
@@ -1056,7 +1057,19 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       const data = candidate.data as FaultTreeNodeData;
 
       if (data.category !== 'TOP_EVENT' && data.category !== 'GATE') return;
-      if (roots.some((root) => root === candidate || this.nodeCanReach(root, candidate))) return;
+
+      // A selected component/subtree can be transferred to a Gate at ANY
+      // graphical/logical level, above or below its current one. Only cycles are
+      // forbidden.
+      if (
+        roots.some(
+          (root) =>
+            root === candidate ||
+            this.nodeCanReach(root, candidate)
+        )
+      ) {
+        return;
+      }
 
       const outPort = candidate.findPort('OUT');
       if (!outPort) return;
@@ -1067,51 +1080,89 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         outPoint.y + RiskSpectrumBranchLink.PARENT_DROP
       );
 
-      let rootDistance = Number.POSITIVE_INFINITY;
+      // The Gate/Top Event itself is a valid drop target. Use its whole visible
+      // node area (record + gate symbol), slightly inflated for natural snapping.
+      const gateBounds = candidate.actualBounds.copy();
+      gateBounds.inflate(gateTolerance, gateTolerance);
+
+      let gateContactDistance = Number.POSITIVE_INFINITY;
+      let outputContactDistance = Number.POSITIVE_INFINITY;
 
       roots.forEach((root) => {
-        const bounds = root.actualBounds.copy();
-        bounds.inflate(nodeTolerance, nodeTolerance);
+        const rootBounds = root.actualBounds.copy();
 
-        // A component placed below/on the Gate output should attach even if no
-        // branch Link exists yet.
-        rootDistance = Math.min(
-          rootDistance,
-          this.distanceFromRectToSegment(bounds, outPoint, virtualStemEnd)
+        gateContactDistance = Math.min(
+          gateContactDistance,
+          this.distanceBetweenRects(rootBounds, gateBounds)
         );
 
-        // Existing branch geometry is also a valid drop target.
+        const expandedRootBounds = rootBounds.copy();
+        expandedRootBounds.inflate(nodeTolerance, nodeTolerance);
+
+        // Output port / virtual stem remains a valid target, including Gates
+        // with no existing children.
+        outputContactDistance = Math.min(
+          outputContactDistance,
+          this.distanceFromRectToSegment(
+            expandedRootBounds,
+            outPoint,
+            virtualStemEnd
+          )
+        );
+
+        // Existing outgoing branch is also a valid target.
         candidate.findLinksOutOf().each((link) => {
-          rootDistance = Math.min(
-            rootDistance,
-            this.distanceFromRectToLink(bounds, link)
+          outputContactDistance = Math.min(
+            outputContactDistance,
+            this.distanceFromRectToLink(expandedRootBounds, link)
           );
         });
       });
 
-      let pointerDistance = this.distanceFromPointToSegment(
+      const pointerToGate = this.distanceFromPointToRect(point, gateBounds);
+
+      let pointerToOutput = this.distanceFromPointToSegment(
         point,
         outPoint,
         virtualStemEnd
       );
 
       candidate.findLinksOutOf().each((link) => {
-        pointerDistance = Math.min(
-          pointerDistance,
+        pointerToOutput = Math.min(
+          pointerToOutput,
           this.distanceFromPointToLink(point, link)
         );
       });
 
-      const rootAccepted = rootDistance <= nodeTolerance;
-      const pointerAccepted = pointerDistance <= pointerTolerance;
+      const gateAccepted =
+        gateContactDistance <= gateTolerance ||
+        pointerToGate <= pointerTolerance;
 
-      if (!rootAccepted && !pointerAccepted) return;
+      const outputAccepted =
+        outputContactDistance <= nodeTolerance ||
+        pointerToOutput <= pointerTolerance;
 
-      // Visual contact of the moved component with the output/branch is stronger
-      // evidence than the pointer location.
-      const score = rootAccepted
-        ? rootDistance
-        : nodeTolerance + pointerDistance;
+      if (!gateAccepted && !outputAccepted) return;
+
+      // Priority:
+      // 1. actual component touching the Gate itself;
+      // 2. actual component touching its OUT/branch;
+      // 3. pointer proximity as fallback.
+      let score: number;
+
+      if (gateContactDistance <= gateTolerance) {
+        score = gateContactDistance;
+      } else if (outputContactDistance <= nodeTolerance) {
+        score = gateTolerance + outputContactDistance;
+      } else if (pointerToGate <= pointerTolerance) {
+        score = gateTolerance + nodeTolerance + pointerToGate;
+      } else {
+        score =
+          gateTolerance +
+          nodeTolerance +
+          pointerTolerance +
+          pointerToOutput;
+      }
 
       if (score < bestScore) {
         bestScore = score;
@@ -1120,6 +1171,38 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     });
 
     return bestParent;
+  }
+
+  private distanceBetweenRects(a: go.Rect, b: go.Rect): number {
+    const dx = a.right < b.left
+      ? b.left - a.right
+      : b.right < a.left
+        ? a.left - b.right
+        : 0;
+
+    const dy = a.bottom < b.top
+      ? b.top - a.bottom
+      : b.bottom < a.top
+        ? a.top - b.bottom
+        : 0;
+
+    return Math.hypot(dx, dy);
+  }
+
+  private distanceFromPointToRect(point: go.Point, rect: go.Rect): number {
+    const dx = point.x < rect.left
+      ? rect.left - point.x
+      : point.x > rect.right
+        ? point.x - rect.right
+        : 0;
+
+    const dy = point.y < rect.top
+      ? rect.top - point.y
+      : point.y > rect.bottom
+        ? point.y - rect.bottom
+        : 0;
+
+    return Math.hypot(dx, dy);
   }
 
   private findNearestValidBranchLink(
