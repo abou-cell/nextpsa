@@ -1005,7 +1005,11 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     }
 
     const dropPoint = diagram.lastInput.documentPoint;
-    const targetLink = this.findNearestValidBranchLink(diagram, dropPoint, roots);
+    const targetLink = this.findNearestValidBranchLink(
+      diagram,
+      dropPoint,
+      roots
+    );
 
     if (!targetLink?.fromNode) return false;
 
@@ -1028,9 +1032,11 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     point: go.Point,
     roots: readonly go.Node[]
   ): go.Link | null {
-    const tolerance = 18 / Math.max(0.35, diagram.scale);
+    const pointerTolerance = 18 / Math.max(0.35, diagram.scale);
+    const nodeTolerance = 12 / Math.max(0.35, diagram.scale);
+
     let best: go.Link | null = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
+    let bestScore = Number.POSITIVE_INFINITY;
 
     diagram.links.each((link) => {
       const parent = link.fromNode;
@@ -1039,25 +1045,141 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       const parentData = parent.data as FaultTreeNodeData;
       if (parentData.category !== 'TOP_EVENT' && parentData.category !== 'GATE') return;
 
-      // Target Gate must own an output. All Gate/Top Event templates do.
+      // Target branch must originate from a logical component with an OUT port.
       if (!parent.findPort('OUT')) return;
 
       for (const root of roots) {
         if (root === parent) return;
 
-        // Parent may not sit inside the subtree being moved.
+        // A subtree cannot be reattached inside itself.
         if (this.nodeCanReach(root, parent)) return;
       }
 
-      const distance = this.distanceFromPointToLink(point, link);
+      // Primary criterion: the moved root box itself touches / crosses / comes
+      // close to the branch. This is what the user visually perceives as
+      // "putting the component on the branch".
+      let rootDistance = Number.POSITIVE_INFINITY;
 
-      if (distance <= tolerance && distance < bestDistance) {
+      for (const root of roots) {
+        const bounds = root.actualBounds.copy();
+        bounds.inflate(nodeTolerance, nodeTolerance);
+
+        rootDistance = Math.min(
+          rootDistance,
+          this.distanceFromRectToLink(bounds, link)
+        );
+      }
+
+      // Secondary criterion: pointer proximity. This keeps the behavior usable
+      // when the node is visually close but the pointer is released just beside
+      // the branch.
+      const pointerDistance = this.distanceFromPointToLink(point, link);
+
+      const rootAccepted = rootDistance <= nodeTolerance;
+      const pointerAccepted = pointerDistance <= pointerTolerance;
+
+      if (!rootAccepted && !pointerAccepted) return;
+
+      // Strongly prefer actual component/branch contact over cursor proximity.
+      const score = rootAccepted
+        ? rootDistance
+        : nodeTolerance + pointerDistance;
+
+      if (score < bestScore) {
         best = link;
-        bestDistance = distance;
+        bestScore = score;
       }
     });
 
     return best;
+  }
+
+  /**
+   * Distance between an axis-aligned node rectangle and an orthogonal GoJS link.
+   * RiskSpectrumBranchLink uses horizontal/vertical segments, so this gives a
+   * robust "component placed on branch" test even when the mouse cursor itself
+   * is far from the thin line.
+   */
+  private distanceFromRectToLink(rect: go.Rect, link: go.Link): number {
+    if (link.pointsCount < 2) return Number.POSITIVE_INFINITY;
+
+    let minimum = Number.POSITIVE_INFINITY;
+
+    for (let index = 0; index < link.pointsCount - 1; index += 1) {
+      const a = link.getPoint(index);
+      const b = link.getPoint(index + 1);
+
+      minimum = Math.min(
+        minimum,
+        this.distanceFromRectToSegment(rect, a, b)
+      );
+    }
+
+    return minimum;
+  }
+
+  private distanceFromRectToSegment(
+    rect: go.Rect,
+    a: go.Point,
+    b: go.Point
+  ): number {
+    const minX = Math.min(a.x, b.x);
+    const maxX = Math.max(a.x, b.x);
+    const minY = Math.min(a.y, b.y);
+    const maxY = Math.max(a.y, b.y);
+
+    // Horizontal segment.
+    if (Math.abs(a.y - b.y) < 0.001) {
+      const dx = maxX < rect.left
+        ? rect.left - maxX
+        : minX > rect.right
+          ? minX - rect.right
+          : 0;
+
+      const dy = a.y < rect.top
+        ? rect.top - a.y
+        : a.y > rect.bottom
+          ? a.y - rect.bottom
+          : 0;
+
+      return Math.hypot(dx, dy);
+    }
+
+    // Vertical segment.
+    if (Math.abs(a.x - b.x) < 0.001) {
+      const dx = a.x < rect.left
+        ? rect.left - a.x
+        : a.x > rect.right
+          ? a.x - rect.right
+          : 0;
+
+      const dy = maxY < rect.top
+        ? rect.top - maxY
+        : minY > rect.bottom
+          ? minY - rect.bottom
+          : 0;
+
+      return Math.hypot(dx, dy);
+    }
+
+    // Defensive fallback for any non-orthogonal segment.
+    const corners = [
+      new go.Point(rect.left, rect.top),
+      new go.Point(rect.right, rect.top),
+      new go.Point(rect.right, rect.bottom),
+      new go.Point(rect.left, rect.bottom)
+    ];
+
+    let minimum = Number.POSITIVE_INFINITY;
+
+    corners.forEach((corner) => {
+      minimum = Math.min(
+        minimum,
+        this.distanceFromPointToSegment(corner, a, b)
+      );
+    });
+
+    return minimum;
   }
 
   private distanceFromPointToLink(point: go.Point, link: go.Link): number {
