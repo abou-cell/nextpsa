@@ -89,6 +89,8 @@ export interface FaultTreeNodeData {
   manualX?: number;
   /** Free placement Y, only used while a node is not attached to a branch. */
   manualY?: number;
+  /** Stable horizontal order among children of the same Gate. */
+  siblingOrder?: number;
   recordType: 'GAT' | 'BEV' | 'HEV' | 'FTR';
 }
 
