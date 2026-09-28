@@ -837,7 +837,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     });
 
     diagram.addDiagramListener('ExternalObjectsDropped', () => {
-      this.autoConnectDroppedNodes(diagram);
+      const droppedNodes = this.normalizeExternalPaletteDrop(diagram);
+      this.autoConnectDroppedNodes(diagram, droppedNodes);
       this.finalizeMagneticPlacement(diagram);
     });
 
@@ -1005,17 +1006,17 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     }
 
     const dropPoint = diagram.lastInput.documentPoint;
-    const targetLink = this.findNearestValidBranchLink(
+    const targetParent = this.findNearestValidTargetParent(
       diagram,
       dropPoint,
       roots
     );
 
-    if (!targetLink?.fromNode) return false;
+    if (!targetParent) return false;
 
     return this.reparentSelectionToParentAsLast(
       diagram,
-      targetLink.fromNode,
+      targetParent,
       roots
     );
   }
@@ -1027,6 +1028,100 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
    * No branch is coloured or visually enlarged. We simply measure distance to
    * the existing thin RiskSpectrum link geometry.
    */
+  /**
+   * Resolve the logical target parent from what the user visually drops onto.
+   *
+   * A valid target is a Gate / Top Event with an OUT port. Detection combines:
+   *  - its existing outgoing RiskSpectrum branch, when present;
+   *  - the invisible OUT attachment point and the short virtual output stem,
+   *    even when the Gate has no child yet;
+   *  - cursor proximity only as a fallback.
+   *
+   * This is essential for new palette components: a Gate with zero children has
+   * no Link to hit, but its OUT port must still accept the new component.
+   */
+  private findNearestValidTargetParent(
+    diagram: go.Diagram,
+    point: go.Point,
+    roots: readonly go.Node[]
+  ): go.Node | null {
+    const scale = Math.max(0.35, diagram.scale);
+    const nodeTolerance = 18 / scale;
+    const pointerTolerance = 24 / scale;
+
+    let bestParent: go.Node | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    diagram.nodes.each((candidate) => {
+      const data = candidate.data as FaultTreeNodeData;
+
+      if (data.category !== 'TOP_EVENT' && data.category !== 'GATE') return;
+      if (roots.some((root) => root === candidate || this.nodeCanReach(root, candidate))) return;
+
+      const outPort = candidate.findPort('OUT');
+      if (!outPort) return;
+
+      const outPoint = outPort.getDocumentPoint(go.Spot.Center);
+      const virtualStemEnd = new go.Point(
+        outPoint.x,
+        outPoint.y + RiskSpectrumBranchLink.PARENT_DROP
+      );
+
+      let rootDistance = Number.POSITIVE_INFINITY;
+
+      roots.forEach((root) => {
+        const bounds = root.actualBounds.copy();
+        bounds.inflate(nodeTolerance, nodeTolerance);
+
+        // A component placed below/on the Gate output should attach even if no
+        // branch Link exists yet.
+        rootDistance = Math.min(
+          rootDistance,
+          this.distanceFromRectToSegment(bounds, outPoint, virtualStemEnd)
+        );
+
+        // Existing branch geometry is also a valid drop target.
+        candidate.findLinksOutOf().each((link) => {
+          rootDistance = Math.min(
+            rootDistance,
+            this.distanceFromRectToLink(bounds, link)
+          );
+        });
+      });
+
+      let pointerDistance = this.distanceFromPointToSegment(
+        point,
+        outPoint,
+        virtualStemEnd
+      );
+
+      candidate.findLinksOutOf().each((link) => {
+        pointerDistance = Math.min(
+          pointerDistance,
+          this.distanceFromPointToLink(point, link)
+        );
+      });
+
+      const rootAccepted = rootDistance <= nodeTolerance;
+      const pointerAccepted = pointerDistance <= pointerTolerance;
+
+      if (!rootAccepted && !pointerAccepted) return;
+
+      // Visual contact of the moved component with the output/branch is stronger
+      // evidence than the pointer location.
+      const score = rootAccepted
+        ? rootDistance
+        : nodeTolerance + pointerDistance;
+
+      if (score < bestScore) {
+        bestScore = score;
+        bestParent = candidate;
+      }
+    });
+
+    return bestParent;
+  }
+
   private findNearestValidBranchLink(
     diagram: go.Diagram,
     point: go.Point,
