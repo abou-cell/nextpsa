@@ -356,3 +356,24 @@ After attachment:
 - preserve logical subtree contents if the moved root is a Gate;
 - recalculate the component's fixed level from the new parent;
 - preserve normal magnetic non-overlap behavior.
+
+
+## Palette component -> Gate output snap
+
+A component dragged from the horizontal palette is normalized into a persistent NextPSA fault-tree node before attachment logic runs.
+
+Attachment must work against a Gate / Top Event even when that Gate has no existing child link yet.
+
+Target detection combines:
+
+- the Gate/Top Event invisible `OUT` port;
+- a virtual output stem below the gate symbol;
+- the existing outgoing RiskSpectrum branch, when present;
+- moved node bounding-box contact as the primary criterion;
+- mouse pointer distance only as fallback.
+
+Therefore a newly created palette component placed under/onto the output of a Gate attaches as:
+
+`Gate.OUT -> NewComponent.IN`
+
+The new node receives a unique FT-position key and is persisted in the Angular-side model, so later move/reparent operations work identically to pre-existing model nodes.
