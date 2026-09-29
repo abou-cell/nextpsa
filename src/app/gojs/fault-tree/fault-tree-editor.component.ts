@@ -124,6 +124,8 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
     // visible on the first branch and produces the straight RiskSpectrum stem.
     if (this.mode === 'LEFT') {
       this.alignFirstChildrenToParentOutputs(fixedRoot);
+    } else {
+      this.alignCenteredChildrenToParentOutputs(fixedRoot);
     }
 
     // Nodes that are not connected to the Top Event are free objects. TreeLayout
@@ -172,6 +174,53 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
 
           if (Math.abs(dx) > 0.25) {
             this.shiftSubtree(firstChild, dx);
+          }
+        }
+      }
+
+      children.forEach((child) => queue.push(child));
+    }
+  }
+
+  /**
+   * In CENTERED mode, when a Gate has an odd number of children, the visual
+   * middle child must sit on the exact OUT axis of the Gate. This creates one
+   * continuous vertical line from Gate output to the centered child instead of
+   * the small horizontal kink visible when TreeLayout leaves a few pixels of
+   * offset.
+   */
+  private alignCenteredChildrenToParentOutputs(root: go.Node): void {
+    const queue: go.Node[] = [root];
+    const visited = new Set<go.Key>();
+
+    while (queue.length) {
+      const parent = queue.shift()!;
+      if (visited.has(parent.key)) continue;
+      visited.add(parent.key);
+
+      const children: go.Node[] = [];
+      parent.findNodesOutOf().each((child) => children.push(child));
+
+      children.sort((a, b) => {
+        const ao = Number((a.data as FaultTreeNodeData).siblingOrder ?? 0);
+        const bo = Number((b.data as FaultTreeNodeData).siblingOrder ?? 0);
+        if (ao !== bo) return ao - bo;
+        return a.actualBounds.center.x - b.actualBounds.center.x;
+      });
+
+      // Only odd child counts have a unique centered component.
+      if (children.length % 2 === 1 && children.length > 0) {
+        const middleChild = children[Math.floor(children.length / 2)];
+        const outPort = parent.findPort('OUT');
+        const inPort = middleChild.findPort('IN');
+
+        if (outPort && inPort) {
+          const parentX = outPort.getDocumentPoint(go.Spot.Center).x;
+          const childX = inPort.getDocumentPoint(go.Spot.Center).x;
+          const dx = parentX - childX;
+
+          if (Math.abs(dx) > 0.01) {
+            this.shiftSubtree(middleChild, dx);
           }
         }
       }
@@ -478,7 +527,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   }
 
   setLayoutMode(mode: FaultTreeLayoutMode): void {
-    if (!this.diagram || this.layoutMode === mode) return;
+    if (!this.diagram) return;
 
     const layout = this.diagram.layout;
 
@@ -492,6 +541,14 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     layout.invalidateLayout();
     this.diagram.layoutDiagram(true);
+
+    if (mode === 'CENTERED') {
+      // Centered mode is also a presentation command: always fit the complete
+      // FT into the current editor viewport and center the resulting document.
+      this.diagram.commandHandler.zoomToFit();
+      this.diagram.centerRect(this.diagram.documentBounds);
+      this.updateZoomLabel();
+    }
   }
 
   fit(): void {
