@@ -927,7 +927,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       // sits a few pixels above the artwork-box bottom. Place OUT on that real
       // visible boundary instead of on the container bottom.
       const outputAlignment = kofn
-        ? go.Spot.Bottom
+        // K/N uses an explicit visible rectangle starting at the top of a
+        // slightly taller panel. Put OUT on the rectangle's real lower edge,
+        // not on the panel bottom.
+        ? new go.Spot(0.5, 0, 0, 20.8)
         : (gateType === 'OR' || gateType === 'NOR' || gateType === 'XOR')
           ? new go.Spot(0.5, 0.925)
           : go.Spot.Bottom;
@@ -935,9 +938,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       return $(go.Panel, 'Spot',
         {
           width: 40,
-          // K/N is a simple 28x20 rectangle. Give it an exact 20 px artwork
-          // box so it sits directly under the record box with no blank band.
-          height: kofn ? 20 : 34
+          // K/N gets 2 px of internal safety height so the 1.1 px outline is
+          // never clipped. The visible rectangle itself still starts directly
+          // below the record box, so no top blank band is reintroduced.
+          height: kofn ? 22 : 34
         },
         $(go.Shape, {
             width: 32,
@@ -964,13 +968,14 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           fill: '#ffffff',
           stroke: '#111111',
           strokeWidth: 1.1,
-          alignment: go.Spot.Center,
+          alignment: new go.Spot(0.5, 0, 0, 0.8),
+          alignmentFocus: go.Spot.Top,
           visible: kofn
         }),
         $(go.TextBlock, {
             font: '8px Inter, sans-serif',
             stroke: '#111111',
-            alignment: go.Spot.Center,
+            alignment: new go.Spot(0.5, 0, 0, 10.8),
             visible: kofn
           },
           new go.Binding('text', 'k', (k: number | undefined) => gateCaption(gateType, k))
