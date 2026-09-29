@@ -51,6 +51,18 @@ interface FaultTreeClipboardSnapshot {
 class FaultTreeCommandHandler extends go.CommandHandler {
   copyAction?: () => boolean;
   pasteAction?: () => boolean;
+  canCopyAction?: () => boolean;
+  canPasteAction?: () => boolean;
+
+  override canCopySelection(): boolean {
+    if (this.canCopyAction?.()) return true;
+    return super.canCopySelection();
+  }
+
+  override canPasteSelection(): boolean {
+    if (this.canPasteAction?.()) return true;
+    return super.canPasteSelection();
+  }
 
   override copySelection(): void {
     if (this.copyAction?.()) return;
@@ -60,6 +72,26 @@ class FaultTreeCommandHandler extends go.CommandHandler {
   override pasteSelection(pos?: go.Point): void {
     if (this.pasteAction?.()) return;
     super.pasteSelection(pos);
+  }
+
+  override doKeyDown(): void {
+    const input = this.diagram?.lastInput;
+    const key = input?.key?.toLowerCase();
+    const modifier = Boolean(input?.control || input?.meta);
+
+    // Explicitly route Ctrl/Cmd+C and Ctrl/Cmd+V through the NextPSA FT
+    // clipboard. This bypasses GoJS's internal clipboard-state gate.
+    if (modifier && key === 'c' && this.canCopySelection()) {
+      this.copySelection();
+      return;
+    }
+
+    if (modifier && key === 'v' && this.canPasteSelection()) {
+      this.pasteSelection();
+      return;
+    }
+
+    super.doKeyDown();
   }
 }
 
@@ -1277,6 +1309,20 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const commandHandler = new FaultTreeCommandHandler();
     commandHandler.copyAction = () => this.copyFaultTreeSelection(diagram);
     commandHandler.pasteAction = () => this.pasteFaultTreeSelection(diagram);
+    commandHandler.canCopyAction = () => {
+      let hasCopyableNode = false;
+      diagram.selection.each((part) => {
+        if (
+          part instanceof go.Node &&
+          (part.data as FaultTreeNodeData).category !== 'TOP_EVENT'
+        ) {
+          hasCopyableNode = true;
+        }
+      });
+      return hasCopyableNode;
+    };
+    commandHandler.canPasteAction = () =>
+      Boolean(this.faultTreeClipboard?.nodes.length);
     diagram.commandHandler = commandHandler;
 
 
