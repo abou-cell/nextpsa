@@ -479,3 +479,18 @@ The centered layout uses subtree contour packing rather than post-layout pixel s
 - the centered toolbar command then runs Fit so the wider FT remains fully visible.
 
 Visual centering must never override collision avoidance.
+
+
+## Exact centered IN/OUT axis
+
+In **CENTERED + Fit** mode, alignment is defined by logical connection ports, not by visual record-box centers.
+
+For a Gate/Top Event with exactly one child, or with an odd number of direct children:
+
+- the unique/middle child's `IN.x` is exactly equal to the parent `OUT.x`;
+- contour packing is measured relative to this logical port axis;
+- the central branch is rendered as one continuous vertical line;
+- no redundant horizontal segment is inserted when `OUT.x == IN.x`;
+- collision-free subtree spacing remains enforced.
+
+This rule applies only to the centered/pyramid geometry. The left-aligned RiskSpectrum mode remains unchanged.
