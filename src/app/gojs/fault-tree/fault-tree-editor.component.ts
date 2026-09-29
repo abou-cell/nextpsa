@@ -2486,18 +2486,22 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     // A target branch is armed only when an actual Link is selected.
     // Selecting a Gate alone must NOT implicitly attach pasted content.
     let targetParent: go.Node | null = null;
-    diagram.selection.each((part) => {
-      if (targetParent || !(part instanceof go.Link)) return;
-      const parent = part.fromNode;
-      if (!parent) return;
-      const data = parent.data as FaultTreeNodeData;
-      if (
-        (data.category === 'TOP_EVENT' || data.category === 'GATE') &&
-        parent.findPort('OUT')
-      ) {
-        targetParent = parent;
+    const selectedPart = diagram.selection.first();
+
+    if (selectedPart instanceof go.Link) {
+      const parent = selectedPart.fromNode;
+
+      if (parent) {
+        const data = parent.data as FaultTreeNodeData;
+
+        if (
+          (data.category === 'TOP_EVENT' || data.category === 'GATE') &&
+          parent.findPort('OUT')
+        ) {
+          targetParent = parent;
+        }
       }
-    });
+    }
 
     const sourceToNewKey = new Map<string, string>();
     const clonedNodes: FaultTreeNodeData[] = [];
@@ -2535,7 +2539,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     if (targetParent) {
       const existingChildren: go.Node[] = [];
-      targetParent.findNodesOutOf().each((child) => existingChildren.push(child));
+      targetParent.findNodesOutOf().each((child: go.Node) => existingChildren.push(child));
       let nextOrder = existingChildren.length;
 
       newRootKeys.forEach((rootKey, index) => {
