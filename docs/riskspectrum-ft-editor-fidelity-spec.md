@@ -544,3 +544,30 @@ Rules:
 - no changes are made to FT logical relations or centered/left layout semantics.
 
 This keeps all outgoing branch strokes visually attached to the RiskSpectrum-style Gate artwork.
+
+
+## Smart copy / paste
+
+Fault Tree copy/paste follows two explicit workflows.
+
+### Copy
+- copying one selected component stores that occurrence only;
+- after **Select branch**, copying stores the selected subtree and all links internal to that subtree;
+- the relation from the copied root to its old parent is intentionally excluded.
+
+### Paste with a target branch selected
+- select an existing branch line, then paste;
+- the branch source Gate / Top Event becomes the new logical parent;
+- pasted root(s) are attached as new children using `OUT -> IN`;
+- internal copied subtree links are preserved;
+- pasted roots are appended after the target parent's existing children;
+- fixed levels and magnetic spacing are recalculated.
+
+### Paste with no branch selected
+- paste creates a detached component/subtree in the workspace;
+- the detached copy is placed below the deepest current FT level;
+- its internal geometry and internal links are preserved;
+- no relation to the main FT is created;
+- the complete pasted selection remains selected and may immediately be dragged to another branch using the normal attachment/reparent workflow.
+
+The same behavior applies to keyboard `Ctrl+C / Ctrl+V` and context-menu Copy / Paste.
