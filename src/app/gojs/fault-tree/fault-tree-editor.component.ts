@@ -38,8 +38,12 @@ import {
  * the common rail. This reproduces the compact "bus" appearance of the
  * desktop Fault Tree editor instead of generic per-link orthogonal routing.
  */
+type FaultTreeLayoutMode = 'LEFT' | 'CENTERED';
+
 class RiskSpectrumLevelLayout extends go.TreeLayout {
   static readonly LEVEL_PITCH = 131;
+
+  mode: FaultTreeLayoutMode = 'LEFT';
 
   private rootAnchor: go.Point | null = null;
 
@@ -115,6 +119,13 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
       node.moveTo(x, y);
     });
 
+    // In LEFT mode the first/leftmost child of every Gate is placed on the exact
+    // same X axis as the parent's OUT port. This removes the tiny horizontal hook
+    // visible on the first branch and produces the straight RiskSpectrum stem.
+    if (this.mode === 'LEFT') {
+      this.alignFirstChildrenToParentOutputs(fixedRoot);
+    }
+
     // Nodes that are not connected to the Top Event are free objects. TreeLayout
     // may inspect/place them internally, but their user-defined X/Y position must
     // be restored whenever a layout is recomputed elsewhere in the tree.
@@ -127,6 +138,61 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
         node.moveTo(data.manualX!, data.manualY!);
       }
     });
+  }
+
+  private alignFirstChildrenToParentOutputs(root: go.Node): void {
+    const queue: go.Node[] = [root];
+    const visited = new Set<go.Key>();
+
+    while (queue.length) {
+      const parent = queue.shift()!;
+      if (visited.has(parent.key)) continue;
+      visited.add(parent.key);
+
+      const children: go.Node[] = [];
+      parent.findNodesOutOf().each((child) => children.push(child));
+
+      children.sort((a, b) => {
+        const ao = Number((a.data as FaultTreeNodeData).siblingOrder ?? 0);
+        const bo = Number((b.data as FaultTreeNodeData).siblingOrder ?? 0);
+        if (ao !== bo) return ao - bo;
+        return a.actualBounds.center.x - b.actualBounds.center.x;
+      });
+
+      const firstChild = children[0];
+
+      if (firstChild) {
+        const outPort = parent.findPort('OUT');
+        const inPort = firstChild.findPort('IN');
+
+        if (outPort && inPort) {
+          const parentX = outPort.getDocumentPoint(go.Spot.Center).x;
+          const childX = inPort.getDocumentPoint(go.Spot.Center).x;
+          const dx = parentX - childX;
+
+          if (Math.abs(dx) > 0.25) {
+            this.shiftSubtree(firstChild, dx);
+          }
+        }
+      }
+
+      children.forEach((child) => queue.push(child));
+    }
+  }
+
+  private shiftSubtree(root: go.Node, dx: number): void {
+    const stack: go.Node[] = [root];
+    const visited = new Set<go.Key>();
+
+    while (stack.length) {
+      const current = stack.pop()!;
+      if (visited.has(current.key)) continue;
+      visited.add(current.key);
+
+      current.moveTo(current.position.x + dx, current.position.y);
+
+      current.findNodesOutOf().each((child) => stack.push(child));
+    }
   }
 }
 
@@ -182,6 +248,28 @@ class RiskSpectrumBranchLink extends go.Link {
             <span class="zoom-label">{{ zoomPercent }}%</span>
             <button type="button" title="Zoom in" (click)="zoom(0.1)">+</button>
             <button type="button" (click)="fit()">Fit</button>
+            <button
+              type="button"
+              class="layout-toggle"
+              [class.active]="layoutMode === 'LEFT'"
+              title="Left-aligned RiskSpectrum layout"
+              aria-label="Left-aligned Fault Tree"
+              (click)="setLayoutMode('LEFT')">
+              <svg viewBox="0 0 26 18" aria-hidden="true">
+                <path d="M5 2v5h16M5 7v9M13 7v9M21 7v9"></path>
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="layout-toggle"
+              [class.active]="layoutMode === 'CENTERED'"
+              title="Centered pyramid layout"
+              aria-label="Centered pyramid Fault Tree"
+              (click)="setLayoutMode('CENTERED')">
+              <svg viewBox="0 0 26 18" aria-hidden="true">
+                <path d="M13 2v5M4 7h18M4 7v9M13 7v9M22 7v9"></path>
+              </svg>
+            </button>
           </div>
           <div class="toolbar-group push-right">
             <span class="status-dot"></span>
@@ -252,6 +340,29 @@ class RiskSpectrumBranchLink extends go.Link {
       font-weight: 600;
     }
     .toolbar-group button:hover { background: #eef5ff; border-color: #b6cdf7; }
+    .toolbar-group button.layout-toggle {
+      width: 34px;
+      min-width: 34px;
+      padding: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .toolbar-group button.layout-toggle svg {
+      width: 24px;
+      height: 17px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+    }
+    .toolbar-group button.layout-toggle.active {
+      color: #0f5bd8;
+      border-color: #6ea2f8;
+      background: #eaf2ff;
+      box-shadow: inset 0 0 0 1px #b7d0fb;
+    }
     .toolbar-separator { width: 1px; height: 20px; background: var(--nps-border); }
     .zoom-label { min-width: 38px; text-align: center; font-variant-numeric: tabular-nums; }
     .push-right { margin-left: auto; white-space: nowrap; }
@@ -339,6 +450,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private branchAttachParentKey: go.Key | null = null;
   branchAttachParentId: string | null = null;
 
+  layoutMode: FaultTreeLayoutMode = 'LEFT';
   zoomPercent = 100;
 
   constructor(private readonly zone: NgZone) {}
@@ -363,6 +475,23 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
   redo(): void {
     this.diagram?.commandHandler.redo();
+  }
+
+  setLayoutMode(mode: FaultTreeLayoutMode): void {
+    if (!this.diagram || this.layoutMode === mode) return;
+
+    const layout = this.diagram.layout;
+
+    if (!(layout instanceof RiskSpectrumLevelLayout)) return;
+
+    this.layoutMode = mode;
+    layout.mode = mode;
+    layout.alignment = mode === 'LEFT'
+      ? go.TreeAlignment.Start
+      : go.TreeAlignment.CenterChildren;
+
+    layout.invalidateLayout();
+    this.diagram.layoutDiagram(true);
   }
 
   fit(): void {
@@ -771,9 +900,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         // with our 132 px record boxes.
         nodeSpacing: 14,
 
-        // In the reference editor a parent is anchored over the first/leftmost
-        // input and additional inputs extend to the right. This also means that
-        // inserting another BE keeps the branch datum stable.
+        // Default view: RiskSpectrum left-aligned branch grammar. The toolbar
+        // can switch this same layout to CenterChildren for pyramid mode.
         alignment: go.TreeAlignment.Start,
         compaction: go.TreeCompaction.Block,
         sorting: go.TreeSorting.Ascending,
