@@ -198,29 +198,37 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
    */
   private arrangeCenteredSubtrees(root: go.Node): void {
     const plan = this.buildCenteredSubtreePlan(root);
-    const rootCenterX = root.actualBounds.center.x;
+    const rootAxisX = this.getLogicalAxisX(root);
 
     plan.positions.forEach((relativeX, node) => {
-      const targetCenterX = rootCenterX + relativeX;
-      const dx = targetCenterX - node.actualBounds.center.x;
+      const targetAxisX = rootAxisX + relativeX;
+      const currentAxisX = this.getLogicalAxisX(node);
+      const dx = targetAxisX - currentAxisX;
 
-      if (Math.abs(dx) > 0.01) {
+      if (Math.abs(dx) > 0.001) {
         node.moveTo(node.position.x + dx, node.position.y);
       }
     });
 
-    // Final routes must be computed from the collision-free positions.
+    // Final routes must be computed from the exact logical port axes.
     root.diagram?.links.each((link) => link.invalidateRoute());
   }
 
   private buildCenteredSubtreePlan(root: go.Node): CenteredSubtreePlan {
     const gap = 30;
-    const width = Math.max(1, root.actualBounds.width || 132);
+    const axisX = this.getLogicalAxisX(root);
+    const bounds = root.actualBounds;
+
+    // Contours are measured from the logical connection axis, not from the
+    // visual box centre. This is essential because the record/symbol composite
+    // can be a few pixels asymmetric even when it looks centred.
+    const leftFromAxis = bounds.left - axisX;
+    const rightFromAxis = bounds.right - axisX;
 
     const result: CenteredSubtreePlan = {
       positions: new Map<go.Node, number>([[root, 0]]),
-      left: [-width / 2],
-      right: [width / 2]
+      left: [leftFromAxis],
+      right: [rightFromAxis]
     };
 
     const children = this.sortedChildren(root);
@@ -360,6 +368,31 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
     return result;
   }
 
+  /**
+   * Axis used by centered/pyramid geometry.
+   *
+   * For an attached node, the IN port is the reference axis because the branch
+   * terminates there. For the Top Event, which has no parent, use OUT. Falling
+   * back to the visual centre is only a defensive fallback.
+   */
+  private getLogicalAxisX(node: go.Node): number {
+    const input = node.findPort('IN');
+
+    if (input) {
+      const x = input.getDocumentPoint(go.Spot.Center).x;
+      if (Number.isFinite(x)) return x;
+    }
+
+    const output = node.findPort('OUT');
+
+    if (output) {
+      const x = output.getDocumentPoint(go.Spot.Center).x;
+      if (Number.isFinite(x)) return x;
+    }
+
+    return node.actualBounds.center.x;
+  }
+
   private sortedChildren(parent: go.Node): go.Node[] {
     const children: go.Node[] = [];
     parent.findNodesOutOf().each((child) => children.push(child));
@@ -416,12 +449,23 @@ class RiskSpectrumBranchLink extends go.Link {
     }
 
     const railY = start.y + RiskSpectrumBranchLink.PARENT_DROP;
+    const alignedX = Math.abs(start.x - end.x) <= 0.01
+      ? start.x
+      : end.x;
 
     this.clearPoints();
     this.addPoint(start);
-    this.addPoint(new go.Point(start.x, railY));
-    this.addPoint(new go.Point(end.x, railY));
-    this.addPoint(end);
+
+    if (Math.abs(start.x - alignedX) <= 0.01) {
+      // Exact single vertical centre branch: do not insert a redundant
+      // horizontal rail segment. This removes the visible 1-2 px "kink".
+      this.addPoint(new go.Point(start.x, railY));
+      this.addPoint(new go.Point(start.x, end.y));
+    } else {
+      this.addPoint(new go.Point(start.x, railY));
+      this.addPoint(new go.Point(end.x, railY));
+      this.addPoint(end);
+    }
 
     return true;
   }
