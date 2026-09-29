@@ -49,10 +49,17 @@ interface FaultTreeClipboardSnapshot {
 }
 
 class FaultTreeCommandHandler extends go.CommandHandler {
+  cutAction?: () => boolean;
   copyAction?: () => boolean;
   pasteAction?: () => boolean;
+  canCutAction?: () => boolean;
   canCopyAction?: () => boolean;
   canPasteAction?: () => boolean;
+
+  override canCutSelection(): boolean {
+    if (this.canCutAction?.()) return true;
+    return super.canCutSelection();
+  }
 
   override canCopySelection(): boolean {
     if (this.canCopyAction?.()) return true;
@@ -62,6 +69,11 @@ class FaultTreeCommandHandler extends go.CommandHandler {
   override canPasteSelection(): boolean {
     if (this.canPasteAction?.()) return true;
     return super.canPasteSelection();
+  }
+
+  override cutSelection(): void {
+    if (this.cutAction?.()) return;
+    super.cutSelection();
   }
 
   override copySelection(): void {
@@ -79,8 +91,13 @@ class FaultTreeCommandHandler extends go.CommandHandler {
     const key = input?.key?.toLowerCase();
     const modifier = Boolean(input?.control || input?.meta);
 
-    // Explicitly route Ctrl/Cmd+C and Ctrl/Cmd+V through the NextPSA FT
-    // clipboard. This bypasses GoJS's internal clipboard-state gate.
+    // Explicitly route Ctrl/Cmd+X/C/V through the NextPSA FT clipboard.
+    // This avoids GoJS native clipboard behavior splitting a selected subtree.
+    if (modifier && key === 'x' && this.canCutSelection()) {
+      this.cutSelection();
+      return;
+    }
+
     if (modifier && key === 'c' && this.canCopySelection()) {
       this.copySelection();
       return;
@@ -1180,7 +1197,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         menuButton('Select branch', 'SELECT_BRANCH'),
         menuButton('Select inputs', 'SELECT_INPUTS'),
         menuSeparator(),
-        menuButton('Cut', 'CUT'),
+        menuButton('Cut     Ctrl+X', 'CUT'),
         menuButton('Copy    Ctrl+C', 'COPY'),
         menuButton('Paste   Ctrl+V', 'PASTE'),
         menuButton('Delete', 'DELETE'),
@@ -1211,7 +1228,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         menuButton('Select branch', 'SELECT_BRANCH', false),
         menuButton('Select inputs', 'SELECT_INPUTS', false),
         menuSeparator(),
-        menuButton('Cut', 'CUT'),
+        menuButton('Cut     Ctrl+X', 'CUT'),
         menuButton('Copy    Ctrl+C', 'COPY'),
         menuButton('Paste   Ctrl+V', 'PASTE'),
         menuButton('Delete', 'DELETE'),
@@ -1307,9 +1324,11 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     });
 
     const commandHandler = new FaultTreeCommandHandler();
+    commandHandler.cutAction = () => this.cutFaultTreeSelection(diagram);
     commandHandler.copyAction = () => this.copyFaultTreeSelection(diagram);
     commandHandler.pasteAction = () => this.pasteFaultTreeSelection(diagram);
-    commandHandler.canCopyAction = () => {
+
+    const hasCopyableSelection = (): boolean => {
       let hasCopyableNode = false;
       diagram.selection.each((part) => {
         if (
@@ -1321,6 +1340,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       });
       return hasCopyableNode;
     };
+
+    commandHandler.canCutAction = hasCopyableSelection;
+    commandHandler.canCopyAction = hasCopyableSelection;
     commandHandler.canPasteAction = () =>
       Boolean(this.faultTreeClipboard?.nodes.length);
     diagram.commandHandler = commandHandler;
@@ -2474,16 +2496,23 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
    * - Select branch => copy all selected descendants and only their INTERNAL links;
    * - the incoming relation from the old parent is never copied.
    */
-  private copyFaultTreeSelection(diagram: go.Diagram): boolean {
+  private selectedFaultTreeNodes(diagram: go.Diagram): go.Node[] {
     const selectedNodes: go.Node[] = [];
 
     diagram.selection.each((part) => {
-      if (part instanceof go.Node) {
-        const data = part.data as FaultTreeNodeData;
-        if (data.category !== 'TOP_EVENT') selectedNodes.push(part);
-      }
+      if (!(part instanceof go.Node)) return;
+
+      const data = part.data as FaultTreeNodeData;
+      if (data.category !== 'TOP_EVENT') selectedNodes.push(part);
     });
 
+    return selectedNodes;
+  }
+
+  private writeFaultTreeClipboard(
+    diagram: go.Diagram,
+    selectedNodes: readonly go.Node[]
+  ): boolean {
     if (!selectedNodes.length) return false;
 
     const selectedKeys = new Set(selectedNodes.map((node) => String(node.key)));
@@ -2519,6 +2548,92 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       positions,
       rootKeys
     };
+
+    return true;
+  }
+
+  private copyFaultTreeSelection(diagram: go.Diagram): boolean {
+    return this.writeFaultTreeClipboard(
+      diagram,
+      this.selectedFaultTreeNodes(diagram)
+    );
+  }
+
+  /**
+   * Atomic FT Cut.
+   *
+   * Native GoJS Cut operates on the instantaneous Part selection. If a
+   * previously "Select branch" selection is collapsed by the context menu,
+   * cutting only the root leaves its descendants behind and visually
+   * decomposes the detached subtree.
+   *
+   * This routine snapshots the full FT selection first, then removes all
+   * selected nodes + incident links in one transaction. A detached branch root
+   * with no parent is automatically expanded to all descendants so a standalone
+   * branch can never be split by Cut.
+   */
+  private cutFaultTreeSelection(diagram: go.Diagram): boolean {
+    const initial = this.selectedFaultTreeNodes(diagram);
+    if (!initial.length) return false;
+
+    const cutNodes = new Map<string, go.Node>();
+
+    const include = (node: go.Node): void => {
+      const data = node.data as FaultTreeNodeData;
+      if (data.category === 'TOP_EVENT') return;
+
+      const key = String(node.key);
+      if (cutNodes.has(key)) return;
+      cutNodes.set(key, node);
+    };
+
+    initial.forEach((node) => include(node));
+
+    // A free/independent branch is one logical unit. If its root has no parent,
+    // include its complete subtree even if only the root was explicitly selected.
+    initial.forEach((root) => {
+      if (root.findLinksInto().first()) return;
+      if (!root.findLinksOutOf().first()) return;
+
+      const visit = (current: go.Node): void => {
+        include(current);
+        current.findNodesOutOf().each((child: go.Node) => visit(child));
+      };
+
+      visit(root);
+    });
+
+    const nodes = [...cutNodes.values()];
+    if (!this.writeFaultTreeClipboard(diagram, nodes)) return false;
+
+    const nodeKeys = new Set(nodes.map((node) => String(node.key)));
+    const graphModel = diagram.model as go.GraphLinksModel;
+
+    const linksToRemove = graphModel.linkDataArray
+      .map((link) => link as FaultTreeLinkData)
+      .filter((link) =>
+        nodeKeys.has(String(link.from)) ||
+        nodeKeys.has(String(link.to))
+      );
+
+    diagram.startTransaction('Cut Fault Tree selection atomically');
+
+    linksToRemove.forEach((link) => graphModel.removeLinkData(link));
+    nodes.forEach((node) => graphModel.removeNodeData(node.data));
+
+    diagram.commitTransaction('Cut Fault Tree selection atomically');
+
+    // Keep Angular-side source model synchronized with the GoJS model.
+    this.model.links = this.model.links.filter((link) =>
+      !nodeKeys.has(String(link.from)) &&
+      !nodeKeys.has(String(link.to))
+    );
+    this.model.nodes = this.model.nodes.filter((node) =>
+      !nodeKeys.has(String(node.key))
+    );
+
+    diagram.clearSelection();
+    diagram.layoutDiagram(true);
 
     return true;
   }
@@ -2691,7 +2806,13 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const diagram = node.diagram;
     if (!diagram) return;
 
-    diagram.select(node);
+    const preserveExistingSelection =
+      (action === 'CUT' || action === 'COPY') &&
+      node.isSelected;
+
+    if (!preserveExistingSelection) {
+      diagram.select(node);
+    }
 
     switch (action) {
       case 'EDIT':
@@ -2742,6 +2863,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         return;
 
       case 'CUT':
+        if (!node.isSelected) {
+          diagram.clearSelection();
+          node.isSelected = true;
+        }
         diagram.commandHandler.cutSelection();
         return;
 
