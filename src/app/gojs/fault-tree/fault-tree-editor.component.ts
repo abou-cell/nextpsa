@@ -216,8 +216,9 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
       }
     });
 
-    // Final deterministic pass: for one child or any odd child count, the
-    // unique middle child's IN axis MUST equal the parent OUT axis exactly.
+    // Final deterministic pass: for one child or any odd child count, align
+    // the child IN to the REAL Gate-symbol OUT port. The OUT port remains on
+    // the gate artwork so the visible line always starts directly on the gate.
     this.enforceCenteredParentChildAxes(root);
 
     // Final routes must be computed from the reconciled exact axes.
@@ -1162,12 +1163,11 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         },
         $(go.Panel, 'Vertical',
           labelPanel(topEvent ? '#d0d0d0' : '#ffffff', '#111111'),
-          gateArtwork(gateType, false)
+          // Restore the previous RiskSpectrum geometry: OUT belongs to the Gate
+          // artwork itself, so every link starts directly on the symbol with no gap.
+          gateArtwork(gateType, true)
         ),
-        // Both logical ports live on the same root Spot panel and therefore
-        // share exactly the same 0.5 X axis, independent of gate artwork.
-        this.makeTopPort(),
-        this.makeBottomPort()
+        this.makeTopPort()
       );
 
     const makeTerminalNodeTemplate = (
