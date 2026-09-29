@@ -1181,8 +1181,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         menuButton('Select inputs', 'SELECT_INPUTS'),
         menuSeparator(),
         menuButton('Cut', 'CUT'),
-        menuButton('Copy', 'COPY'),
-        menuButton('Paste', 'PASTE'),
+        menuButton('Copy    Ctrl+C', 'COPY'),
+        menuButton('Paste   Ctrl+V', 'PASTE'),
         menuButton('Delete', 'DELETE'),
         menuSeparator(),
         menuButton('Find...', 'FIND'),
@@ -1212,8 +1212,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         menuButton('Select inputs', 'SELECT_INPUTS', false),
         menuSeparator(),
         menuButton('Cut', 'CUT'),
-        menuButton('Copy', 'COPY'),
-        menuButton('Paste', 'PASTE'),
+        menuButton('Copy    Ctrl+C', 'COPY'),
+        menuButton('Paste   Ctrl+V', 'PASTE'),
         menuButton('Delete', 'DELETE'),
         menuSeparator(),
         menuButton('Find...', 'FIND'),
@@ -2523,29 +2523,44 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     return true;
   }
 
-  private pasteFaultTreeSelection(diagram: go.Diagram): boolean {
+  private pasteFaultTreeSelection(
+    diagram: go.Diagram,
+    explicitTargetParent: go.Node | null = null
+  ): boolean {
     const snapshot = this.faultTreeClipboard;
     if (!snapshot?.nodes.length) return false;
 
     const graphModel = diagram.model as go.GraphLinksModel;
 
-    // A target branch is armed only when an actual Link is selected.
-    // Selecting a Gate alone must NOT implicitly attach pasted content.
     let targetParent: go.Node | null = null;
-    const selectedPart = diagram.selection.first();
 
-    if (selectedPart instanceof go.Link) {
-      const parent = selectedPart.fromNode;
+    const acceptAsTarget = (candidate: go.Node | null): go.Node | null => {
+      if (!candidate) return null;
 
-      if (parent) {
-        const data = parent.data as FaultTreeNodeData;
+      const data = candidate.data as FaultTreeNodeData;
 
-        if (
-          (data.category === 'TOP_EVENT' || data.category === 'GATE') &&
-          parent.findPort('OUT')
-        ) {
-          targetParent = parent;
-        }
+      if (
+        (data.category === 'TOP_EVENT' || data.category === 'GATE') &&
+        candidate.findPort('OUT')
+      ) {
+        return candidate;
+      }
+
+      return null;
+    };
+
+    // Context-menu Paste may explicitly name the Gate under the pointer.
+    targetParent = acceptAsTarget(explicitTargetParent);
+
+    // Keyboard Paste: selecting a Gate/Top Event directly is enough.
+    if (!targetParent) {
+      const selectedPart = diagram.selection.first();
+
+      if (selectedPart instanceof go.Node) {
+        targetParent = acceptAsTarget(selectedPart);
+      } else if (selectedPart instanceof go.Link) {
+        // Preserve the previous branch-line target workflow.
+        targetParent = acceptAsTarget(selectedPart.fromNode);
       }
     }
 
@@ -2731,12 +2746,27 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         return;
 
       case 'COPY':
+        if (!node.isSelected) {
+          diagram.clearSelection();
+          node.isSelected = true;
+        }
         diagram.commandHandler.copySelection();
         return;
 
-      case 'PASTE':
-        diagram.commandHandler.pasteSelection();
+      case 'PASTE': {
+        const data = node.data as FaultTreeNodeData;
+        const explicitTarget =
+          data.category === 'TOP_EVENT' || data.category === 'GATE'
+            ? node
+            : null;
+
+        if (diagram.commandHandler instanceof FaultTreeCommandHandler) {
+          this.pasteFaultTreeSelection(diagram, explicitTarget);
+        } else {
+          diagram.commandHandler.pasteSelection();
+        }
         return;
+      }
 
       case 'DELETE':
         diagram.commandHandler.deleteSelection();
