@@ -494,3 +494,21 @@ For a Gate/Top Event with exactly one child, or with an odd number of direct chi
 - collision-free subtree spacing remains enforced.
 
 This rule applies only to the centered/pyramid geometry. The left-aligned RiskSpectrum mode remains unchanged.
+
+
+## Structural centered-axis rule
+
+To eliminate persistent 1-3 px dog-legs after Centered + Fit, Gate connection ports are defined on the same root GoJS Spot panel:
+
+- `IN`: root top-center;
+- `OUT`: root bottom-center;
+- both therefore share the same exact X axis, independent of OR/AND/K-N artwork geometry.
+
+Centered layout rules:
+
+- subtree external position is referenced by the subtree root `IN` axis;
+- children originate from the parent `OUT` axis;
+- for one child or any odd number of children, the unique middle child is reconciled so `parent.OUT.x === middle.IN.x`;
+- the unique/middle link is rendered as a single two-point vertical vector in CENTERED mode, avoiding orthogonal join artifacts after Fit;
+- contour-based no-overlap packing remains active;
+- LEFT mode behavior is unchanged.
