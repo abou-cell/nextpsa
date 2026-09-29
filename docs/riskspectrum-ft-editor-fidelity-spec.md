@@ -407,3 +407,24 @@ After a successful drop:
 6. recompute magnetic X slots to prevent overlap.
 
 No source/target level restriction is applied. A component from a lower level can be moved to a higher-level Gate and vice versa, provided the new relation is acyclic.
+
+
+## Left-aligned and centered pyramid views
+
+The Fault Tree toolbar exposes two mutually exclusive layout modes next to **Fit**.
+
+### Left-aligned RiskSpectrum mode
+- uses `TreeAlignment.Start`;
+- the first/leftmost child of each Gate is aligned on the exact X-axis of the parent `OUT` port;
+- this removes the small horizontal hook on the first branch;
+- additional children extend to the right;
+- Top Event stays anchored.
+
+### Centered pyramid mode
+- uses `TreeAlignment.CenterChildren`;
+- each parent is centered over its children/subtrees;
+- the complete FT reads as a centered pyramid;
+- fixed logical Y levels, sibling order and non-overlap remain unchanged;
+- Top Event stays anchored while children redistribute around it.
+
+Switching mode only changes the layout view; it does not alter FT logical relations.
