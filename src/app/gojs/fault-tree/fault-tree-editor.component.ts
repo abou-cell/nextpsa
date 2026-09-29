@@ -844,7 +844,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
    * Invisible logical output for Gate / Top Event nodes only.
    * BE / HE / Diamond / Transfer intentionally never receive an OUT port.
    */
-  private makeBottomPort(): go.Shape {
+  private makeBottomPort(alignment: go.Spot = go.Spot.Bottom): go.Shape {
     const $ = go.GraphObject.make;
     return $(go.Shape, 'Rectangle', {
       portId: 'OUT',
@@ -853,7 +853,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       fill: 'transparent',
       stroke: null,
       opacity: 0,
-      alignment: go.Spot.Bottom,
+      alignment,
       alignmentFocus: go.Spot.Center,
       fromLinkable: true,
       toLinkable: false,
@@ -920,11 +920,24 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
      * The gate body is intentionally separate from the GoJS connection ports.
      * NAND / NOR use the same gate body plus the inversion bubble above it.
      */
-    const gateArtwork = (gateType: GateType, includeOutputPort = true) =>
-      $(go.Panel, 'Spot',
+    const gateArtwork = (gateType: GateType, includeOutputPort = true) => {
+      const kofn = isKofNGate(gateType);
+
+      // The OR/NOR/XOR lower boundary is concave: at X=50% the visible curve
+      // sits a few pixels above the artwork-box bottom. Place OUT on that real
+      // visible boundary instead of on the container bottom.
+      const outputAlignment = kofn
+        ? go.Spot.Bottom
+        : (gateType === 'OR' || gateType === 'NOR' || gateType === 'XOR')
+          ? new go.Spot(0.5, 0.925)
+          : go.Spot.Bottom;
+
+      return $(go.Panel, 'Spot',
         {
           width: 40,
-          height: 34
+          // K/N is a simple 28x20 rectangle. Give it an exact 20 px artwork
+          // box so it sits directly under the record box with no blank band.
+          height: kofn ? 20 : 34
         },
         $(go.Shape, {
             width: 32,
@@ -934,7 +947,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
             stroke: '#111111',
             strokeWidth: 1.25,
             alignment: new go.Spot(0.5, 0.62),
-            visible: !isKofNGate(gateType),
+            visible: !kofn,
             geometryString: gateGeometry(gateType)
           }
         ),
@@ -951,19 +964,20 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           fill: '#ffffff',
           stroke: '#111111',
           strokeWidth: 1.1,
-          alignment: new go.Spot(0.5, 0.60),
-          visible: isKofNGate(gateType)
+          alignment: go.Spot.Center,
+          visible: kofn
         }),
         $(go.TextBlock, {
             font: '8px Inter, sans-serif',
             stroke: '#111111',
-            alignment: new go.Spot(0.5, 0.60),
-            visible: isKofNGate(gateType)
+            alignment: go.Spot.Center,
+            visible: kofn
           },
           new go.Binding('text', 'k', (k: number | undefined) => gateCaption(gateType, k))
         ),
-        ...(includeOutputPort ? [this.makeBottomPort()] : [])
+        ...(includeOutputPort ? [this.makeBottomPort(outputAlignment)] : [])
       );
+    };
 
     const basicCircleArtwork = () =>
       $(go.Shape, 'Circle', {
