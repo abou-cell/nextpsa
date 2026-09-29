@@ -512,3 +512,19 @@ Centered layout rules:
 - the unique/middle link is rendered as a single two-point vertical vector in CENTERED mode, avoiding orthogonal join artifacts after Fit;
 - contour-based no-overlap packing remains active;
 - LEFT mode behavior is unchanged.
+
+
+## Restore Gate-attached output ports in centered mode
+
+The centered-mode axis correction must not detach branch lines from Gate symbols.
+
+Required geometry:
+
+- Gate / Top Event `OUT` remains inside the Gate artwork panel, exactly as in the earlier RiskSpectrum-style implementation;
+- every outgoing link therefore starts directly on the visible Gate symbol with no white gap;
+- `IN` remains the invisible root-top attachment point of the child node;
+- CENTERED mode may move the middle child/subtree horizontally until `parent.OUT.x === child.IN.x`;
+- the unique/middle centered link may then be rendered as one vertical vector from the REAL Gate-symbol OUT to the child IN;
+- LEFT mode keeps the earlier Gate-attached routing unchanged.
+
+Do not move the Gate OUT port to the bottom of the whole record node: that creates a visible gap between the Gate symbol and the branch line.
