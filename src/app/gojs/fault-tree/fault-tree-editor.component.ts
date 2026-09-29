@@ -125,7 +125,7 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
     if (this.mode === 'LEFT') {
       this.alignFirstChildrenToParentOutputs(fixedRoot);
     } else {
-      this.alignCenteredChildrenToParentOutputs(fixedRoot);
+      this.arrangeCenteredSubtrees(fixedRoot);
     }
 
     // Nodes that are not connected to the Top Event are free objects. TreeLayout
@@ -183,50 +183,155 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
   }
 
   /**
-   * In CENTERED mode, when a Gate has an odd number of children, the visual
-   * middle child must sit on the exact OUT axis of the Gate. This creates one
-   * continuous vertical line from Gate output to the centered child instead of
-   * the small horizontal kink visible when TreeLayout leaves a few pixels of
-   * offset.
+   * Collision-safe centered/pyramid layout.
+   *
+   * The previous implementation shifted only the visual middle subtree onto the
+   * Gate OUT axis after TreeLayout had already packed siblings. That could push
+   * one subtree into a neighbouring subtree and create overlaps.
+   *
+   * This version packs complete child subtrees as indivisible horizontal blocks:
+   * - descendants are arranged first (bottom-up);
+   * - odd child counts: middle subtree is aligned exactly under parent OUT;
+   * - even child counts: parent OUT is centered in the gap between the two
+   *   middle subtrees;
+   * - remaining subtrees are packed left/right using their complete bounds;
+   * - no subtree is allowed to overlap another sibling subtree.
    */
-  private alignCenteredChildrenToParentOutputs(root: go.Node): void {
-    const queue: go.Node[] = [root];
+  private arrangeCenteredSubtrees(root: go.Node): void {
     const visited = new Set<go.Key>();
+    const gap = 18;
 
-    while (queue.length) {
-      const parent = queue.shift()!;
-      if (visited.has(parent.key)) continue;
+    const arrange = (parent: go.Node): void => {
+      if (visited.has(parent.key)) return;
       visited.add(parent.key);
 
-      const children: go.Node[] = [];
-      parent.findNodesOutOf().each((child) => children.push(child));
+      const children = this.sortedChildren(parent);
+      children.forEach((child) => arrange(child));
 
-      children.sort((a, b) => {
-        const ao = Number((a.data as FaultTreeNodeData).siblingOrder ?? 0);
-        const bo = Number((b.data as FaultTreeNodeData).siblingOrder ?? 0);
-        if (ao !== bo) return ao - bo;
-        return a.actualBounds.center.x - b.actualBounds.center.x;
-      });
+      if (!children.length) return;
 
-      // Only odd child counts have a unique centered component.
-      if (children.length % 2 === 1 && children.length > 0) {
-        const middleChild = children[Math.floor(children.length / 2)];
-        const outPort = parent.findPort('OUT');
-        const inPort = middleChild.findPort('IN');
+      const outPort = parent.findPort('OUT');
+      if (!outPort) return;
 
-        if (outPort && inPort) {
-          const parentX = outPort.getDocumentPoint(go.Spot.Center).x;
-          const childX = inPort.getDocumentPoint(go.Spot.Center).x;
-          const dx = parentX - childX;
+      const axisX = outPort.getDocumentPoint(go.Spot.Center).x;
+      const count = children.length;
 
-          if (Math.abs(dx) > 0.01) {
-            this.shiftSubtree(middleChild, dx);
-          }
+      if (count % 2 === 1) {
+        const middleIndex = Math.floor(count / 2);
+        const middleChild = children[middleIndex];
+        const middleIn = middleChild.findPort('IN');
+
+        if (middleIn) {
+          const middleX = middleIn.getDocumentPoint(go.Spot.Center).x;
+          this.shiftSubtree(middleChild, axisX - middleX);
+        }
+
+        let middleBounds = this.getSubtreeBounds(middleChild);
+
+        // Pack siblings immediately to the left of the complete middle subtree.
+        let nextRight = middleBounds.left - gap;
+        for (let index = middleIndex - 1; index >= 0; index -= 1) {
+          const child = children[index];
+          const bounds = this.getSubtreeBounds(child);
+          const dx = nextRight - bounds.right;
+          this.shiftSubtree(child, dx);
+          const shifted = this.getSubtreeBounds(child);
+          nextRight = shifted.left - gap;
+        }
+
+        // Pack siblings immediately to the right of the complete middle subtree.
+        middleBounds = this.getSubtreeBounds(middleChild);
+        let nextLeft = middleBounds.right + gap;
+        for (let index = middleIndex + 1; index < count; index += 1) {
+          const child = children[index];
+          const bounds = this.getSubtreeBounds(child);
+          const dx = nextLeft - bounds.left;
+          this.shiftSubtree(child, dx);
+          const shifted = this.getSubtreeBounds(child);
+          nextLeft = shifted.right + gap;
+        }
+      } else {
+        // With an even number of children there is no single centered child.
+        // Keep a clean central gap around the parent OUT axis, then pack
+        // complete subtrees outward from that gap.
+        const rightMiddleIndex = count / 2;
+        const leftMiddleIndex = rightMiddleIndex - 1;
+
+        let nextRight = axisX - gap / 2;
+        for (let index = leftMiddleIndex; index >= 0; index -= 1) {
+          const child = children[index];
+          const bounds = this.getSubtreeBounds(child);
+          const dx = nextRight - bounds.right;
+          this.shiftSubtree(child, dx);
+          const shifted = this.getSubtreeBounds(child);
+          nextRight = shifted.left - gap;
+        }
+
+        let nextLeft = axisX + gap / 2;
+        for (let index = rightMiddleIndex; index < count; index += 1) {
+          const child = children[index];
+          const bounds = this.getSubtreeBounds(child);
+          const dx = nextLeft - bounds.left;
+          this.shiftSubtree(child, dx);
+          const shifted = this.getSubtreeBounds(child);
+          nextLeft = shifted.right + gap;
         }
       }
+    };
 
-      children.forEach((child) => queue.push(child));
+    arrange(root);
+
+    // Node positions changed after TreeLayout's initial routing pass.
+    // Force every RiskSpectrumBranchLink to recompute from the final positions.
+    root.diagram?.links.each((link) => link.invalidateRoute());
+  }
+
+  private sortedChildren(parent: go.Node): go.Node[] {
+    const children: go.Node[] = [];
+    parent.findNodesOutOf().each((child) => children.push(child));
+
+    children.sort((a, b) => {
+      const ao = Number((a.data as FaultTreeNodeData).siblingOrder ?? 0);
+      const bo = Number((b.data as FaultTreeNodeData).siblingOrder ?? 0);
+
+      if (ao !== bo) return ao - bo;
+
+      return a.actualBounds.center.x - b.actualBounds.center.x;
+    });
+
+    return children;
+  }
+
+  private getSubtreeBounds(root: go.Node): go.Rect {
+    let minX = root.actualBounds.left;
+    let minY = root.actualBounds.top;
+    let maxX = root.actualBounds.right;
+    let maxY = root.actualBounds.bottom;
+
+    const stack: go.Node[] = [];
+    root.findNodesOutOf().each((child) => stack.push(child));
+
+    const visited = new Set<go.Key>([root.key]);
+
+    while (stack.length) {
+      const current = stack.pop()!;
+      if (visited.has(current.key)) continue;
+      visited.add(current.key);
+
+      minX = Math.min(minX, current.actualBounds.left);
+      minY = Math.min(minY, current.actualBounds.top);
+      maxX = Math.max(maxX, current.actualBounds.right);
+      maxY = Math.max(maxY, current.actualBounds.bottom);
+
+      current.findNodesOutOf().each((child) => stack.push(child));
     }
+
+    return new go.Rect(
+      minX,
+      minY,
+      Math.max(0, maxX - minX),
+      Math.max(0, maxY - minY)
+    );
   }
 
   private shiftSubtree(root: go.Node, dx: number): void {
