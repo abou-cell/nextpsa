@@ -528,3 +528,19 @@ Required geometry:
 - LEFT mode keeps the earlier Gate-attached routing unchanged.
 
 Do not move the Gate OUT port to the bottom of the whole record node: that creates a visible gap between the Gate symbol and the branch line.
+
+
+## Flush Gate-to-link geometry
+
+Outgoing branch lines must start on the visible Gate symbol itself, with no white gap.
+
+Rules:
+
+- AND/NAND: `OUT` is at the visual lower edge of the Gate;
+- OR/NOR/XOR: because the lower edge is concave, `OUT` is positioned on the actual center-bottom curve rather than the artwork container bottom;
+- K/N: the Gate artwork container is exactly 20 px high, matching the visible 28x20 K/N rectangle;
+- therefore the K/N rectangle sits directly under the record box with no blank band;
+- the K/N `OUT` remains on the lower edge of the small rectangle;
+- no changes are made to FT logical relations or centered/left layout semantics.
+
+This keeps all outgoing branch strokes visually attached to the RiskSpectrum-style Gate artwork.
