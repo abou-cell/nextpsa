@@ -571,3 +571,20 @@ Fault Tree copy/paste follows two explicit workflows.
 - the complete pasted selection remains selected and may immediately be dragged to another branch using the normal attachment/reparent workflow.
 
 The same behavior applies to keyboard `Ctrl+C / Ctrl+V` and context-menu Copy / Paste.
+
+
+## Atomic Cut for detached branches
+
+Cut must use the same NextPSA FT clipboard semantics as Copy/Paste.
+
+Rules:
+
+- `Ctrl/Cmd+X` and context-menu **Cut** use the custom FT clipboard;
+- when a complete branch was selected with **Select branch**, the context menu must preserve that multi-selection;
+- the selected subtree is snapshotted with all internal links before deletion;
+- all selected nodes and every incident link are removed in one transaction;
+- the Angular-side FT model is updated in the same operation;
+- a detached/independent branch root with no parent is treated as one logical unit: Cut automatically includes all descendants even if only the root is selected;
+- therefore Cut can never leave the descendants of a standalone branch scattered in the workspace.
+
+Paste after Cut follows the normal smart-paste rules: attach to a selected Gate/branch, or paste detached below the FT if no target is selected.
