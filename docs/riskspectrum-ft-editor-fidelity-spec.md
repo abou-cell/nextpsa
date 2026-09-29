@@ -428,3 +428,16 @@ The Fault Tree toolbar exposes two mutually exclusive layout modes next to **Fit
 - Top Event stays anchored while children redistribute around it.
 
 Switching mode only changes the layout view; it does not alter FT logical relations.
+
+
+## Centered mode fit and straight center axis
+
+When the centered/pyramid toolbar mode is activated:
+
+- the FT layout switches to `TreeAlignment.CenterChildren`;
+- the complete Fault Tree is immediately fit into the editor viewport;
+- the document is centered in the visible canvas;
+- for any Gate with an odd number of direct children, the middle child is aligned exactly with the Gate `OUT` axis;
+- therefore the Gate output, branch rail junction and middle-child input share the same X coordinate, eliminating the small horizontal kink shown in the review screenshot.
+
+This affects presentation only; FT logical relations remain unchanged.
