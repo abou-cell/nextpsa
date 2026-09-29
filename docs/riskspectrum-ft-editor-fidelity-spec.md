@@ -441,3 +441,21 @@ When the centered/pyramid toolbar mode is activated:
 - therefore the Gate output, branch rail junction and middle-child input share the same X coordinate, eliminating the small horizontal kink shown in the review screenshot.
 
 This affects presentation only; FT logical relations remain unchanged.
+
+
+## Collision-safe centered subtree packing
+
+Centered/pyramid mode must never realign a child subtree independently after sibling packing, because that can make neighbouring branches overlap.
+
+The centered layout therefore treats every direct child subtree as one horizontal block:
+
+- arrange descendants bottom-up;
+- compute the full bounds of each child subtree;
+- odd number of children: align the middle child's input exactly with the parent Gate OUT axis;
+- pack left sibling subtrees outward from the middle subtree;
+- pack right sibling subtrees outward from the middle subtree;
+- even number of children: keep a centered gap around the parent OUT axis and pack subtrees to both sides;
+- minimum horizontal gap between sibling subtree bounds: 18 px;
+- invalidate branch routes after final node positions are applied.
+
+This preserves a straight center axis without allowing components or subtrees to overlap.
