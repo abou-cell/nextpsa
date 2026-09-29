@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import * as go from 'gojs';
 import {
+  FaultTreeLinkData,
   FaultTreeModel,
   FaultTreeNodeData,
   GateType
@@ -39,6 +40,28 @@ import {
  * desktop Fault Tree editor instead of generic per-link orthogonal routing.
  */
 type FaultTreeLayoutMode = 'LEFT' | 'CENTERED';
+
+interface FaultTreeClipboardSnapshot {
+  nodes: FaultTreeNodeData[];
+  links: FaultTreeLinkData[];
+  positions: Map<string, go.Point>;
+  rootKeys: string[];
+}
+
+class FaultTreeCommandHandler extends go.CommandHandler {
+  copyAction?: () => boolean;
+  pasteAction?: () => boolean;
+
+  override copySelection(): void {
+    if (this.copyAction?.()) return;
+    super.copySelection();
+  }
+
+  override pasteSelection(pos?: go.Point): void {
+    if (this.pasteAction?.()) return;
+    super.pasteSelection(pos);
+  }
+}
 
 interface CenteredSubtreePlan {
   positions: Map<go.Node, number>;
@@ -743,6 +766,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private diagram?: go.Diagram;
   private palette?: go.Palette;
   private insertionSerial = 0;
+  private faultTreeClipboard: FaultTreeClipboardSnapshot | null = null;
 
   // The logical father selected in the FT canvas. This survives focus changes
   // when the user clicks the separate GoJS Palette diagram.
@@ -1249,6 +1273,12 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         setsChildPortSpot: false
       })
     });
+
+    const commandHandler = new FaultTreeCommandHandler();
+    commandHandler.copyAction = () => this.copyFaultTreeSelection(diagram);
+    commandHandler.pasteAction = () => this.pasteFaultTreeSelection(diagram);
+    diagram.commandHandler = commandHandler;
+
 
     const gateTypes: readonly GateType[] = ['AND', 'OR', 'NAND', 'NOR', 'XOR', 'KOFN'];
     gateTypes.forEach((type) => {
@@ -2389,6 +2419,207 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     if (node.category === 'TRANSFER') return 'XFR';
 
     return 'NODE';
+  }
+
+  /**
+   * Custom FT clipboard.
+   *
+   * - one selected component => copy only that occurrence;
+   * - Select branch => copy all selected descendants and only their INTERNAL links;
+   * - the incoming relation from the old parent is never copied.
+   */
+  private copyFaultTreeSelection(diagram: go.Diagram): boolean {
+    const selectedNodes: go.Node[] = [];
+
+    diagram.selection.each((part) => {
+      if (part instanceof go.Node) {
+        const data = part.data as FaultTreeNodeData;
+        if (data.category !== 'TOP_EVENT') selectedNodes.push(part);
+      }
+    });
+
+    if (!selectedNodes.length) return false;
+
+    const selectedKeys = new Set(selectedNodes.map((node) => String(node.key)));
+    const graphModel = diagram.model as go.GraphLinksModel;
+
+    const nodes = selectedNodes.map((node) => ({
+      ...(node.data as FaultTreeNodeData)
+    }));
+
+    const links = graphModel.linkDataArray
+      .map((link) => link as FaultTreeLinkData)
+      .filter((link) =>
+        selectedKeys.has(String(link.from)) &&
+        selectedKeys.has(String(link.to))
+      )
+      .map((link) => ({ ...link }));
+
+    const rootKeys = selectedNodes
+      .filter((node) => {
+        const incoming = node.findLinksInto().first();
+        return !incoming || !selectedKeys.has(String(incoming.fromNode?.key));
+      })
+      .map((node) => String(node.key));
+
+    const positions = new Map<string, go.Point>();
+    selectedNodes.forEach((node) => {
+      positions.set(String(node.key), node.position.copy());
+    });
+
+    this.faultTreeClipboard = {
+      nodes,
+      links,
+      positions,
+      rootKeys
+    };
+
+    return true;
+  }
+
+  private pasteFaultTreeSelection(diagram: go.Diagram): boolean {
+    const snapshot = this.faultTreeClipboard;
+    if (!snapshot?.nodes.length) return false;
+
+    const graphModel = diagram.model as go.GraphLinksModel;
+
+    // A target branch is armed only when an actual Link is selected.
+    // Selecting a Gate alone must NOT implicitly attach pasted content.
+    let targetParent: go.Node | null = null;
+    diagram.selection.each((part) => {
+      if (targetParent || !(part instanceof go.Link)) return;
+      const parent = part.fromNode;
+      if (!parent) return;
+      const data = parent.data as FaultTreeNodeData;
+      if (
+        (data.category === 'TOP_EVENT' || data.category === 'GATE') &&
+        parent.findPort('OUT')
+      ) {
+        targetParent = parent;
+      }
+    });
+
+    const sourceToNewKey = new Map<string, string>();
+    const clonedNodes: FaultTreeNodeData[] = [];
+
+    snapshot.nodes.forEach((source) => {
+      const serial = ++this.insertionSerial;
+      const newKey = `FTNODE-COPY-${serial}-${source.key}`;
+      sourceToNewKey.set(String(source.key), newKey);
+
+      clonedNodes.push({
+        ...source,
+        key: newKey,
+        manualX: undefined,
+        manualY: undefined
+      });
+    });
+
+    const clonedLinks: FaultTreeLinkData[] = snapshot.links.map((source, index) => ({
+      ...source,
+      key: `COPY-LINK-${++this.insertionSerial}-${index}`,
+      from: sourceToNewKey.get(String(source.from))!,
+      to: sourceToNewKey.get(String(source.to))!,
+      fromPort: 'OUT',
+      toPort: 'IN'
+    }));
+
+    const newRootKeys = snapshot.rootKeys
+      .map((key) => sourceToNewKey.get(String(key)))
+      .filter((key): key is string => Boolean(key));
+
+    diagram.startTransaction('Paste Fault Tree selection');
+
+    clonedNodes.forEach((node) => graphModel.addNodeData(node));
+    clonedLinks.forEach((link) => graphModel.addLinkData(link));
+
+    if (targetParent) {
+      const existingChildren: go.Node[] = [];
+      targetParent.findNodesOutOf().each((child) => existingChildren.push(child));
+      let nextOrder = existingChildren.length;
+
+      newRootKeys.forEach((rootKey, index) => {
+        const rootData = graphModel.findNodeDataForKey(rootKey) as FaultTreeNodeData | null;
+        if (!rootData) return;
+
+        graphModel.setDataProperty(rootData, 'manualX', undefined);
+        graphModel.setDataProperty(rootData, 'manualY', undefined);
+        graphModel.setDataProperty(rootData, 'siblingOrder', nextOrder + index);
+
+        const link: FaultTreeLinkData = {
+          key: `PASTE-ATTACH-${++this.insertionSerial}`,
+          from: String(targetParent!.key),
+          to: rootKey,
+          fromPort: 'OUT',
+          toPort: 'IN',
+          negated: false
+        };
+
+        graphModel.addLinkData(link);
+        clonedLinks.push(link);
+      });
+    } else {
+      // No target branch: paste as a detached free object/subtree BELOW the
+      // deepest current FT level. Internal copied links remain intact.
+      const existingNodes: go.Node[] = [];
+      diagram.nodes.each((node) => {
+        if (!sourceToNewKey.has(String(node.key))) existingNodes.push(node);
+      });
+
+      const deepestBottom = existingNodes.length
+        ? Math.max(...existingNodes.map((node) => node.actualBounds.bottom))
+        : diagram.viewportBounds.center.y;
+
+      const sourcePositions = [...snapshot.positions.values()];
+      const minX = Math.min(...sourcePositions.map((p) => p.x));
+      const maxX = Math.max(...sourcePositions.map((p) => p.x + 132));
+      const minY = Math.min(...sourcePositions.map((p) => p.y));
+
+      const groupWidth = Math.max(132, maxX - minX);
+      const targetLeft = diagram.viewportBounds.center.x - groupWidth / 2;
+      const offsetX = targetLeft - minX;
+      const offsetY = deepestBottom + 90 - minY;
+
+      snapshot.nodes.forEach((source) => {
+        const newKey = sourceToNewKey.get(String(source.key));
+        const sourcePosition = snapshot.positions.get(String(source.key));
+        if (!newKey || !sourcePosition) return;
+
+        const data = graphModel.findNodeDataForKey(newKey) as FaultTreeNodeData | null;
+        if (!data) return;
+
+        graphModel.setDataProperty(data, 'manualX', sourcePosition.x + offsetX);
+        graphModel.setDataProperty(data, 'manualY', sourcePosition.y + offsetY);
+      });
+    }
+
+    diagram.commitTransaction('Paste Fault Tree selection');
+
+    // Synchronize Angular-side model with the new occurrences and relations.
+    clonedNodes.forEach((node) => {
+      const current = graphModel.findNodeDataForKey(node.key) as FaultTreeNodeData | null;
+      if (current && !this.model.nodes.some((existing) => existing.key === current.key)) {
+        this.model.nodes.push({ ...current });
+      }
+    });
+
+    clonedLinks.forEach((link) => {
+      if (!this.model.links.some((existing) => String(existing.key) === String(link.key))) {
+        this.model.links.push({ ...link });
+      }
+    });
+
+    diagram.layoutDiagram(true);
+
+    // Keep the complete pasted occurrence/branch selected so it can immediately
+    // be dragged onto another branch if it was pasted free.
+    diagram.clearSelection();
+    clonedNodes.forEach((nodeData) => {
+      const node = diagram.findNodeForKey(nodeData.key);
+      if (node) node.isSelected = true;
+    });
+
+    return true;
   }
 
   private handleContextAction(action: string, node: go.Node): void {
