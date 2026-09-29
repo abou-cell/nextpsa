@@ -198,11 +198,17 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
    */
   private arrangeCenteredSubtrees(root: go.Node): void {
     const plan = this.buildCenteredSubtreePlan(root);
-    const rootAxisX = this.getLogicalAxisX(root);
+
+    // The root of the displayed FT is anchored by its OUT axis. Every other
+    // subtree root is positioned by its IN axis, because that is where the
+    // parent branch physically terminates.
+    const rootAxisX = this.getOutputAxisX(root);
 
     plan.positions.forEach((relativeX, node) => {
       const targetAxisX = rootAxisX + relativeX;
-      const currentAxisX = this.getLogicalAxisX(node);
+      const currentAxisX = node === root
+        ? this.getOutputAxisX(node)
+        : this.getInputAxisX(node);
       const dx = targetAxisX - currentAxisX;
 
       if (Math.abs(dx) > 0.001) {
@@ -210,20 +216,26 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
       }
     });
 
-    // Final routes must be computed from the exact logical port axes.
+    // Final deterministic pass: for one child or any odd child count, the
+    // unique middle child's IN axis MUST equal the parent OUT axis exactly.
+    this.enforceCenteredParentChildAxes(root);
+
+    // Final routes must be computed from the reconciled exact axes.
     root.diagram?.links.each((link) => link.invalidateRoute());
   }
 
   private buildCenteredSubtreePlan(root: go.Node): CenteredSubtreePlan {
     const gap = 30;
-    const axisX = this.getLogicalAxisX(root);
+    const inputAxisX = this.getInputAxisX(root);
+    const outputAxisX = this.getOutputAxisX(root);
+    const outputOffsetFromInput = outputAxisX - inputAxisX;
     const bounds = root.actualBounds;
 
-    // Contours are measured from the logical connection axis, not from the
-    // visual box centre. This is essential because the record/symbol composite
-    // can be a few pixels asymmetric even when it looks centred.
-    const leftFromAxis = bounds.left - axisX;
-    const rightFromAxis = bounds.right - axisX;
+    // A subtree is externally connected through its IN axis. Its children,
+    // however, originate from the parent's OUT axis. Keeping this offset
+    // explicit prevents a small "dog-leg" on K/N, OR, AND, etc.
+    const leftFromAxis = bounds.left - inputAxisX;
+    const rightFromAxis = bounds.right - inputAxisX;
 
     const result: CenteredSubtreePlan = {
       positions: new Map<go.Node, number>([[root, 0]]),
@@ -295,7 +307,10 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
       const middleIndex = Math.floor(count / 2);
       const middle = childPlans[middleIndex];
 
-      middle.offset = 0;
+      // Align the middle child's IN axis with THIS parent's OUT axis.
+      // child plan coordinates are relative to child IN, parent plan coordinates
+      // are relative to parent IN, hence the explicit OUT-vs-IN offset.
+      middle.offset = outputOffsetFromInput;
       addToUnion(middle.plan, middle.offset);
 
       for (let index = middleIndex - 1; index >= 0; index -= 1) {
@@ -368,29 +383,47 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
     return result;
   }
 
-  /**
-   * Axis used by centered/pyramid geometry.
-   *
-   * For an attached node, the IN port is the reference axis because the branch
-   * terminates there. For the Top Event, which has no parent, use OUT. Falling
-   * back to the visual centre is only a defensive fallback.
-   */
-  private getLogicalAxisX(node: go.Node): number {
+  private getInputAxisX(node: go.Node): number {
     const input = node.findPort('IN');
+    const x = input?.getDocumentPoint(go.Spot.Center).x;
+    return Number.isFinite(x) ? x! : node.actualBounds.center.x;
+  }
 
-    if (input) {
-      const x = input.getDocumentPoint(go.Spot.Center).x;
-      if (Number.isFinite(x)) return x;
-    }
-
+  private getOutputAxisX(node: go.Node): number {
     const output = node.findPort('OUT');
+    const x = output?.getDocumentPoint(go.Spot.Center).x;
+    return Number.isFinite(x) ? x! : node.actualBounds.center.x;
+  }
 
-    if (output) {
-      const x = output.getDocumentPoint(go.Spot.Center).x;
-      if (Number.isFinite(x)) return x;
+  /**
+   * Exact centered-axis reconciliation after all contour packing is complete.
+   * This is intentionally a final pass so no later layout operation can
+   * reintroduce a 1-3 px horizontal kink.
+   */
+  private enforceCenteredParentChildAxes(root: go.Node): void {
+    const queue: go.Node[] = [root];
+    const visited = new Set<go.Key>();
+
+    while (queue.length) {
+      const parent = queue.shift()!;
+      if (visited.has(parent.key)) continue;
+      visited.add(parent.key);
+
+      const children = this.sortedChildren(parent);
+
+      if (children.length > 0 && children.length % 2 === 1) {
+        const middle = children[Math.floor(children.length / 2)];
+        const parentOutX = this.getOutputAxisX(parent);
+        const childInX = this.getInputAxisX(middle);
+        const dx = parentOutX - childInX;
+
+        if (Math.abs(dx) > 0.0001) {
+          this.shiftSubtree(middle, dx);
+        }
+      }
+
+      children.forEach((child) => queue.push(child));
     }
-
-    return node.actualBounds.center.x;
   }
 
   private sortedChildren(parent: go.Node): go.Node[] {
@@ -428,14 +461,39 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
 class RiskSpectrumBranchLink extends go.Link {
   static readonly PARENT_DROP = 22;
 
+  private isCenteredMiddleChildLink(): boolean {
+    const diagram = this.diagram;
+    const parent = this.fromNode;
+    const child = this.toNode;
+
+    if (!diagram || !parent || !child) return false;
+
+    const layout = diagram.layout;
+    if (!(layout instanceof RiskSpectrumLevelLayout) || layout.mode !== 'CENTERED') {
+      return false;
+    }
+
+    const children: go.Node[] = [];
+    parent.findNodesOutOf().each((node) => children.push(node));
+
+    children.sort((a, b) => {
+      const ao = Number((a.data as FaultTreeNodeData).siblingOrder ?? 0);
+      const bo = Number((b.data as FaultTreeNodeData).siblingOrder ?? 0);
+      if (ao !== bo) return ao - bo;
+      return a.actualBounds.center.x - b.actualBounds.center.x;
+    });
+
+    if (!children.length || children.length % 2 === 0) return false;
+
+    return children[Math.floor(children.length / 2)] === child;
+  }
+
   override computePoints(): boolean {
     const fromPort = this.fromPort;
     const toPort = this.toPort;
 
     if (!fromPort || !toPort) return super.computePoints();
 
-    // The invisible ports are centred exactly on the visible symbol output
-    // and the child record-box top edge respectively.
     const start = fromPort.getDocumentPoint(go.Spot.Center);
     const end = toPort.getDocumentPoint(go.Spot.Center);
 
@@ -448,18 +506,23 @@ class RiskSpectrumBranchLink extends go.Link {
       return super.computePoints();
     }
 
-    const railY = start.y + RiskSpectrumBranchLink.PARENT_DROP;
-    const alignedX = Math.abs(start.x - end.x) <= 0.01
-      ? start.x
-      : end.x;
-
     this.clearPoints();
+
+    // CENTERED mode: the unique/middle branch is always one continuous
+    // vertical vector. Using only two points also avoids sub-pixel joins after Fit.
+    if (this.isCenteredMiddleChildLink()) {
+      this.addPoint(start);
+      this.addPoint(new go.Point(start.x, end.y));
+      return true;
+    }
+
+    const railY = start.y + RiskSpectrumBranchLink.PARENT_DROP;
+
     this.addPoint(start);
 
-    if (Math.abs(start.x - alignedX) <= 0.01) {
-      // Exact single vertical centre branch: do not insert a redundant
-      // horizontal rail segment. This removes the visible 1-2 px "kink".
-      this.addPoint(new go.Point(start.x, railY));
+    if (Math.abs(start.x - end.x) <= 0.01) {
+      // Keep the existing clean vertical behavior in left mode when axes
+      // already happen to be identical.
       this.addPoint(new go.Point(start.x, end.y));
     } else {
       this.addPoint(new go.Point(start.x, railY));
@@ -1099,9 +1162,12 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         },
         $(go.Panel, 'Vertical',
           labelPanel(topEvent ? '#d0d0d0' : '#ffffff', '#111111'),
-          gateArtwork(gateType, true)
+          gateArtwork(gateType, false)
         ),
-        this.makeTopPort()
+        // Both logical ports live on the same root Spot panel and therefore
+        // share exactly the same 0.5 X axis, independent of gate artwork.
+        this.makeTopPort(),
+        this.makeBottomPort()
       );
 
     const makeTerminalNodeTemplate = (
