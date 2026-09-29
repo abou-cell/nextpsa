@@ -40,6 +40,12 @@ import {
  */
 type FaultTreeLayoutMode = 'LEFT' | 'CENTERED';
 
+interface CenteredSubtreePlan {
+  positions: Map<go.Node, number>;
+  left: number[];
+  right: number[];
+}
+
 class RiskSpectrumLevelLayout extends go.TreeLayout {
   static readonly LEVEL_PITCH = 131;
 
@@ -183,107 +189,175 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
   }
 
   /**
-   * Collision-safe centered/pyramid layout.
+   * Strict non-overlapping centered/pyramid layout.
    *
-   * The previous implementation shifted only the visual middle subtree onto the
-   * Gate OUT axis after TreeLayout had already packed siblings. That could push
-   * one subtree into a neighbouring subtree and create overlaps.
-   *
-   * This version packs complete child subtrees as indivisible horizontal blocks:
-   * - descendants are arranged first (bottom-up);
-   * - odd child counts: middle subtree is aligned exactly under parent OUT;
-   * - even child counts: parent OUT is centered in the gap between the two
-   *   middle subtrees;
-   * - remaining subtrees are packed left/right using their complete bounds;
-   * - no subtree is allowed to overlap another sibling subtree.
+   * Each subtree is represented by horizontal contours at every relative depth.
+   * Sibling subtrees are separated until NONE of those contours intersect.
+   * The FT is allowed to become as wide as necessary; Fit is responsible for
+   * fitting the resulting engineering drawing into the viewport.
    */
   private arrangeCenteredSubtrees(root: go.Node): void {
-    const visited = new Set<go.Key>();
-    const gap = 18;
+    const plan = this.buildCenteredSubtreePlan(root);
+    const rootCenterX = root.actualBounds.center.x;
 
-    const arrange = (parent: go.Node): void => {
-      if (visited.has(parent.key)) return;
-      visited.add(parent.key);
+    plan.positions.forEach((relativeX, node) => {
+      const targetCenterX = rootCenterX + relativeX;
+      const dx = targetCenterX - node.actualBounds.center.x;
 
-      const children = this.sortedChildren(parent);
-      children.forEach((child) => arrange(child));
+      if (Math.abs(dx) > 0.01) {
+        node.moveTo(node.position.x + dx, node.position.y);
+      }
+    });
 
-      if (!children.length) return;
+    // Final routes must be computed from the collision-free positions.
+    root.diagram?.links.each((link) => link.invalidateRoute());
+  }
 
-      const outPort = parent.findPort('OUT');
-      if (!outPort) return;
+  private buildCenteredSubtreePlan(root: go.Node): CenteredSubtreePlan {
+    const gap = 30;
+    const width = Math.max(1, root.actualBounds.width || 132);
 
-      const axisX = outPort.getDocumentPoint(go.Spot.Center).x;
-      const count = children.length;
+    const result: CenteredSubtreePlan = {
+      positions: new Map<go.Node, number>([[root, 0]]),
+      left: [-width / 2],
+      right: [width / 2]
+    };
 
-      if (count % 2 === 1) {
-        const middleIndex = Math.floor(count / 2);
-        const middleChild = children[middleIndex];
-        const middleIn = middleChild.findPort('IN');
+    const children = this.sortedChildren(root);
+    if (!children.length) return result;
 
-        if (middleIn) {
-          const middleX = middleIn.getDocumentPoint(go.Spot.Center).x;
-          this.shiftSubtree(middleChild, axisX - middleX);
-        }
+    const childPlans = children.map((child) => ({
+      child,
+      plan: this.buildCenteredSubtreePlan(child),
+      offset: 0
+    }));
 
-        let middleBounds = this.getSubtreeBounds(middleChild);
+    const unionLeft: number[] = [];
+    const unionRight: number[] = [];
 
-        // Pack siblings immediately to the left of the complete middle subtree.
-        let nextRight = middleBounds.left - gap;
-        for (let index = middleIndex - 1; index >= 0; index -= 1) {
-          const child = children[index];
-          const bounds = this.getSubtreeBounds(child);
-          const dx = nextRight - bounds.right;
-          this.shiftSubtree(child, dx);
-          const shifted = this.getSubtreeBounds(child);
-          nextRight = shifted.left - gap;
-        }
+    const addToUnion = (plan: CenteredSubtreePlan, offset: number): void => {
+      const depthCount = Math.max(plan.left.length, plan.right.length);
 
-        // Pack siblings immediately to the right of the complete middle subtree.
-        middleBounds = this.getSubtreeBounds(middleChild);
-        let nextLeft = middleBounds.right + gap;
-        for (let index = middleIndex + 1; index < count; index += 1) {
-          const child = children[index];
-          const bounds = this.getSubtreeBounds(child);
-          const dx = nextLeft - bounds.left;
-          this.shiftSubtree(child, dx);
-          const shifted = this.getSubtreeBounds(child);
-          nextLeft = shifted.right + gap;
-        }
-      } else {
-        // With an even number of children there is no single centered child.
-        // Keep a clean central gap around the parent OUT axis, then pack
-        // complete subtrees outward from that gap.
-        const rightMiddleIndex = count / 2;
-        const leftMiddleIndex = rightMiddleIndex - 1;
+      for (let depth = 0; depth < depthCount; depth += 1) {
+        const left = plan.left[depth] + offset;
+        const right = plan.right[depth] + offset;
 
-        let nextRight = axisX - gap / 2;
-        for (let index = leftMiddleIndex; index >= 0; index -= 1) {
-          const child = children[index];
-          const bounds = this.getSubtreeBounds(child);
-          const dx = nextRight - bounds.right;
-          this.shiftSubtree(child, dx);
-          const shifted = this.getSubtreeBounds(child);
-          nextRight = shifted.left - gap;
-        }
+        unionLeft[depth] = unionLeft[depth] === undefined
+          ? left
+          : Math.min(unionLeft[depth], left);
 
-        let nextLeft = axisX + gap / 2;
-        for (let index = rightMiddleIndex; index < count; index += 1) {
-          const child = children[index];
-          const bounds = this.getSubtreeBounds(child);
-          const dx = nextLeft - bounds.left;
-          this.shiftSubtree(child, dx);
-          const shifted = this.getSubtreeBounds(child);
-          nextLeft = shifted.right + gap;
-        }
+        unionRight[depth] = unionRight[depth] === undefined
+          ? right
+          : Math.max(unionRight[depth], right);
       }
     };
 
-    arrange(root);
+    const placeLeftOfUnion = (plan: CenteredSubtreePlan): number => {
+      let offset = Number.POSITIVE_INFINITY;
+      const depthCount = Math.min(plan.right.length, unionLeft.length);
 
-    // Node positions changed after TreeLayout's initial routing pass.
-    // Force every RiskSpectrumBranchLink to recompute from the final positions.
-    root.diagram?.links.each((link) => link.invalidateRoute());
+      for (let depth = 0; depth < depthCount; depth += 1) {
+        offset = Math.min(
+          offset,
+          unionLeft[depth] - gap - plan.right[depth]
+        );
+      }
+
+      return Number.isFinite(offset) ? offset : 0;
+    };
+
+    const placeRightOfUnion = (plan: CenteredSubtreePlan): number => {
+      let offset = Number.NEGATIVE_INFINITY;
+      const depthCount = Math.min(plan.left.length, unionRight.length);
+
+      for (let depth = 0; depth < depthCount; depth += 1) {
+        offset = Math.max(
+          offset,
+          unionRight[depth] + gap - plan.left[depth]
+        );
+      }
+
+      return Number.isFinite(offset) ? offset : 0;
+    };
+
+    const count = childPlans.length;
+
+    if (count % 2 === 1) {
+      // A unique middle child exists: its IN axis is exactly the parent OUT axis.
+      const middleIndex = Math.floor(count / 2);
+      const middle = childPlans[middleIndex];
+
+      middle.offset = 0;
+      addToUnion(middle.plan, middle.offset);
+
+      for (let index = middleIndex - 1; index >= 0; index -= 1) {
+        const entry = childPlans[index];
+        entry.offset = placeLeftOfUnion(entry.plan);
+        addToUnion(entry.plan, entry.offset);
+      }
+
+      for (let index = middleIndex + 1; index < count; index += 1) {
+        const entry = childPlans[index];
+        entry.offset = placeRightOfUnion(entry.plan);
+        addToUnion(entry.plan, entry.offset);
+      }
+    } else {
+      // No unique center child. Determine the minimum separation required
+      // between the two central subtrees across ALL their contour depths.
+      const rightMiddleIndex = count / 2;
+      const leftMiddleIndex = rightMiddleIndex - 1;
+      const leftMiddle = childPlans[leftMiddleIndex];
+      const rightMiddle = childPlans[rightMiddleIndex];
+
+      let requiredSeparation = gap;
+      const commonDepth = Math.min(
+        leftMiddle.plan.right.length,
+        rightMiddle.plan.left.length
+      );
+
+      for (let depth = 0; depth < commonDepth; depth += 1) {
+        requiredSeparation = Math.max(
+          requiredSeparation,
+          leftMiddle.plan.right[depth] +
+            gap -
+            rightMiddle.plan.left[depth]
+        );
+      }
+
+      leftMiddle.offset = -requiredSeparation / 2;
+      rightMiddle.offset = requiredSeparation / 2;
+
+      addToUnion(leftMiddle.plan, leftMiddle.offset);
+      addToUnion(rightMiddle.plan, rightMiddle.offset);
+
+      for (let index = leftMiddleIndex - 1; index >= 0; index -= 1) {
+        const entry = childPlans[index];
+        entry.offset = placeLeftOfUnion(entry.plan);
+        addToUnion(entry.plan, entry.offset);
+      }
+
+      for (let index = rightMiddleIndex + 1; index < count; index += 1) {
+        const entry = childPlans[index];
+        entry.offset = placeRightOfUnion(entry.plan);
+        addToUnion(entry.plan, entry.offset);
+      }
+    }
+
+    // Merge all child-relative node positions into the parent-relative plan.
+    childPlans.forEach(({ plan, offset }) => {
+      plan.positions.forEach((relativeX, node) => {
+        result.positions.set(node, relativeX + offset);
+      });
+    });
+
+    // Parent occupies relative depth 0. Child contour depth 0 becomes parent
+    // contour depth 1, etc.
+    for (let depth = 0; depth < unionLeft.length; depth += 1) {
+      result.left[depth + 1] = unionLeft[depth];
+      result.right[depth + 1] = unionRight[depth];
+    }
+
+    return result;
   }
 
   private sortedChildren(parent: go.Node): go.Node[] {
@@ -300,38 +374,6 @@ class RiskSpectrumLevelLayout extends go.TreeLayout {
     });
 
     return children;
-  }
-
-  private getSubtreeBounds(root: go.Node): go.Rect {
-    let minX = root.actualBounds.left;
-    let minY = root.actualBounds.top;
-    let maxX = root.actualBounds.right;
-    let maxY = root.actualBounds.bottom;
-
-    const stack: go.Node[] = [];
-    root.findNodesOutOf().each((child) => stack.push(child));
-
-    const visited = new Set<go.Key>([root.key]);
-
-    while (stack.length) {
-      const current = stack.pop()!;
-      if (visited.has(current.key)) continue;
-      visited.add(current.key);
-
-      minX = Math.min(minX, current.actualBounds.left);
-      minY = Math.min(minY, current.actualBounds.top);
-      maxX = Math.max(maxX, current.actualBounds.right);
-      maxY = Math.max(maxY, current.actualBounds.bottom);
-
-      current.findNodesOutOf().each((child) => stack.push(child));
-    }
-
-    return new go.Rect(
-      minX,
-      minY,
-      Math.max(0, maxX - minX),
-      Math.max(0, maxY - minY)
-    );
   }
 
   private shiftSubtree(root: go.Node, dx: number): void {

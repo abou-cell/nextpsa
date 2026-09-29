@@ -459,3 +459,23 @@ The centered layout therefore treats every direct child subtree as one horizonta
 - invalidate branch routes after final node positions are applied.
 
 This preserves a straight center axis without allowing components or subtrees to overlap.
+
+
+## Absolute no-overlap rule for centered layout
+
+Centered/pyramid mode follows one non-negotiable rule:
+
+**No two attached FT components or subtrees may overlap.**
+
+The centered layout uses subtree contour packing rather than post-layout pixel shifts.
+
+- each subtree exposes left/right horizontal contours at every relative depth;
+- sibling subtrees are separated until their contours are at least 30 px apart at every common depth;
+- the FT is allowed to expand horizontally without limit when necessary;
+- odd child counts keep the middle child exactly on the parent OUT axis;
+- even child counts keep a true central gap between the two middle subtrees;
+- child subtrees are packed from the center outward;
+- only after the collision-free geometry is complete are branch routes recomputed;
+- the centered toolbar command then runs Fit so the wider FT remains fully visible.
+
+Visual centering must never override collision avoidance.
