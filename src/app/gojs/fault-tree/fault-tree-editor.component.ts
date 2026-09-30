@@ -1011,6 +1011,87 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     }
   }
 
+  private selectedSingleNegatableNode(diagram: go.Diagram): go.Node | null {
+    const nodes: go.Node[] = [];
+
+    diagram.selection.each((part) => {
+      if (part instanceof go.Node) nodes.push(part);
+    });
+
+    if (nodes.length !== 1) return null;
+
+    const node = nodes[0];
+    const data = node.data as FaultTreeNodeData;
+
+    // Negation is represented on the incoming relation. The Top Event (and any
+    // detached node without a parent) therefore cannot be toggled.
+    if (data.category === 'TOP_EVENT') return null;
+    if (!node.findLinksInto().first()) return null;
+
+    return node;
+  }
+
+  canNegateSelection(): boolean {
+    return Boolean(
+      this.diagram &&
+      this.selectedSingleNegatableNode(this.diagram)
+    );
+  }
+
+  isSelectedNodeNegated(): boolean {
+    if (!this.diagram) return false;
+
+    const node = this.selectedSingleNegatableNode(this.diagram);
+    if (!node) return false;
+
+    const incoming = node.findLinksInto().first();
+    return Boolean(
+      (node.data as FaultTreeNodeData).negated ??
+      (incoming?.data as FaultTreeLinkData | undefined)?.negated
+    );
+  }
+
+  toggleNegateSelection(): void {
+    if (!this.diagram) return;
+
+    const node = this.selectedSingleNegatableNode(this.diagram);
+    if (!node) return;
+
+    this.toggleNegateNode(node);
+  }
+
+  private toggleNegateNode(node: go.Node): boolean {
+    const diagram = node.diagram;
+    if (!diagram) return false;
+
+    const incoming = node.findLinksInto().first();
+    if (!incoming) return false;
+
+    const graphModel = diagram.model as go.GraphLinksModel;
+    const nodeData = node.data as FaultTreeNodeData;
+    const linkData = incoming.data as FaultTreeLinkData;
+    const next = !Boolean(linkData.negated);
+
+    diagram.startTransaction(next ? 'Negate fault-tree node' : 'Unnegate fault-tree node');
+
+    // Keep the logical relation as the authoritative quantification state and
+    // mirror the same state on the node for visual/menu binding.
+    graphModel.setDataProperty(linkData, 'negated', next);
+    graphModel.setDataProperty(nodeData, 'negated', next);
+
+    diagram.commitTransaction(next ? 'Negate fault-tree node' : 'Unnegate fault-tree node');
+
+    const sourceNode = this.model.nodes.find((item) => item.key === nodeData.key);
+    if (sourceNode) sourceNode.negated = next;
+
+    const sourceLink = this.model.links.find(
+      (item) => String(item.key) === String(linkData.key)
+    );
+    if (sourceLink) sourceLink.negated = next;
+
+    return true;
+  }
+
   toggleTagPalette(): void {
     this.tagPaletteOpen = !this.tagPaletteOpen;
   }
