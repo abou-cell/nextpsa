@@ -72,13 +72,46 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
 
         <section class="fault-tree-browser-panel">
           <div class="ft-table-wrap">
-            <table class="ft-table" aria-label="Fault Trees in project">
+            <table
+              class="ft-table"
+              aria-label="Fault Trees in project"
+              [style.min-width.px]="tableMinWidth()">
+              <colgroup>
+                <col [style.width.px]="columnWidths()[0]">
+                <col [style.width.px]="columnWidths()[1]">
+                <col [style.width.px]="columnWidths()[2]">
+                <col [style.width.px]="columnWidths()[3]">
+              </colgroup>
               <thead>
                 <tr>
-                  <th scope="col">ID Fault Tree</th>
-                  <th scope="col">Description</th>
-                  <th scope="col">Edited date</th>
-                  <th scope="col">Edited by</th>
+                  <th scope="col">
+                    ID Fault Tree
+                    <span class="column-resizer" role="separator" aria-orientation="vertical"
+                      title="Drag to resize column; double-click to reset"
+                      (pointerdown)="startColumnResize($event, 0)"
+                      (dblclick)="resetColumnWidth(0)"></span>
+                  </th>
+                  <th scope="col">
+                    Description
+                    <span class="column-resizer" role="separator" aria-orientation="vertical"
+                      title="Drag to resize column; double-click to reset"
+                      (pointerdown)="startColumnResize($event, 1)"
+                      (dblclick)="resetColumnWidth(1)"></span>
+                  </th>
+                  <th scope="col">
+                    Edited date
+                    <span class="column-resizer" role="separator" aria-orientation="vertical"
+                      title="Drag to resize column; double-click to reset"
+                      (pointerdown)="startColumnResize($event, 2)"
+                      (dblclick)="resetColumnWidth(2)"></span>
+                  </th>
+                  <th scope="col">
+                    Edited by
+                    <span class="column-resizer" role="separator" aria-orientation="vertical"
+                      title="Drag to resize column; double-click to reset"
+                      (pointerdown)="startColumnResize($event, 3)"
+                      (dblclick)="resetColumnWidth(3)"></span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -87,14 +120,36 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
                   [class.selected]="tree.id === selectedTableTreeId()"
                   [class.tagged]="!!tree.tagColor"
                   [style.background-color]="tree.tagColor || null"
+                  [style.height.px]="rowHeight(tree.id)"
                   tabindex="0"
                   (click)="selectFaultTree(tree)"
                   (keydown.enter)="selectFaultTree(tree)"
                   (keydown.space)="selectFaultTree(tree)">
-                  <td class="ft-id">{{ tree.id }}</td>
-                  <td class="ft-description">{{ tree.description }}</td>
-                  <td class="ft-edited-date">01/10/2026</td>
-                  <td class="ft-edited-by">AR</td>
+                  <td class="ft-id">
+                    {{ tree.id }}
+                    <span class="row-resizer"
+                      title="Drag to resize row; double-click to reset"
+                      (pointerdown)="startRowResize($event, tree.id)"
+                      (dblclick)="resetRowHeight(tree.id)"></span>
+                  </td>
+                  <td class="ft-description">
+                    {{ tree.description }}
+                    <span class="row-resizer"
+                      (pointerdown)="startRowResize($event, tree.id)"
+                      (dblclick)="resetRowHeight(tree.id)"></span>
+                  </td>
+                  <td class="ft-edited-date">
+                    01/10/2026
+                    <span class="row-resizer"
+                      (pointerdown)="startRowResize($event, tree.id)"
+                      (dblclick)="resetRowHeight(tree.id)"></span>
+                  </td>
+                  <td class="ft-edited-by">
+                    AR
+                    <span class="row-resizer"
+                      (pointerdown)="startRowResize($event, tree.id)"
+                      (dblclick)="resetRowHeight(tree.id)"></span>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -159,12 +214,16 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .browser-footer strong { font-size: 10px; color: var(--nps-text); }
     .tagged-count { margin-left: 10px; color: var(--nps-text-muted); font-weight: 600; }
     .ft-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: #fff; color: #111827; }
-    .ft-table th, .ft-table td { height: 38px; padding: 0 14px; border-bottom: 1px solid #dfe6ee; border-right: 1px solid #dfe6ee; text-align: left; vertical-align: middle; font-size: 11px; color: #111827; background: transparent; opacity: 1; visibility: visible; }
+    .ft-table th, .ft-table td { position: relative; min-height: 24px; padding: 0 14px; border-bottom: 1px solid #dfe6ee; border-right: 1px solid #dfe6ee; text-align: left; vertical-align: middle; font-size: 11px; color: #111827; background: transparent; opacity: 1; visibility: visible; }
+    .ft-table th { height: 38px; }
     .ft-table th:last-child, .ft-table td:last-child { border-right: 0; }
-    .ft-table th:nth-child(1), .ft-table td:nth-child(1) { width: 160px; }
-    .ft-table th:nth-child(3), .ft-table td:nth-child(3) { width: 130px; }
-    .ft-table th:nth-child(4), .ft-table td:nth-child(4) { width: 90px; }
     .ft-table thead th { position: sticky; top: 0; z-index: 3; background: #f3f6fa; color: #1f2937; font-weight: 800; }
+    .column-resizer { position: absolute; top: 0; right: -4px; z-index: 6; width: 8px; height: 100%; cursor: col-resize; touch-action: none; }
+    .column-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: transparent; }
+    .column-resizer:hover::after { background: var(--nps-blue); }
+    .row-resizer { position: absolute; left: 0; right: 0; bottom: -4px; z-index: 5; height: 8px; cursor: row-resize; touch-action: none; }
+    .row-resizer::after { content: ''; position: absolute; left: 0; right: 0; top: 3px; height: 1px; background: transparent; }
+    .row-resizer:hover::after { background: var(--nps-blue); }
     .ft-table tbody tr { cursor: pointer; background: #fff; }
     .ft-table tbody tr:hover { background: #f6f9fd; }
     .ft-table tbody tr.selected { box-shadow: inset 3px 0 0 var(--nps-blue); }
@@ -182,9 +241,23 @@ export class FaultTreePageComponent {
   @ViewChild('faultTreeEditor') private faultTreeEditor?: FaultTreeEditorComponent;
 
   readonly browserHeight = signal(178);
+  readonly columnWidths = signal([180, 720, 140, 100]);
+  readonly rowHeights = signal<Record<string, number>>({});
+  readonly tableMinWidth = computed(() =>
+    this.columnWidths().reduce((total, width) => total + width, 0)
+  );
+
   isResizingBrowser = false;
   private resizeStartY = 0;
   private resizeStartHeight = 178;
+
+  private activeColumnResize: number | null = null;
+  private columnResizeStartX = 0;
+  private columnResizeStartWidth = 0;
+
+  private activeRowResizeId: string | null = null;
+  private rowResizeStartY = 0;
+  private rowResizeStartHeight = 38;
 
   readonly projectFaultTrees = computed(() => this.repository.faultTrees().slice(0, 3));
   readonly taggedFaultTreeCount = computed(() =>
@@ -227,6 +300,47 @@ export class FaultTreePageComponent {
     });
   }
 
+  rowHeight(treeId: string): number {
+    return this.rowHeights()[treeId] ?? 38;
+  }
+
+  startColumnResize(event: PointerEvent, columnIndex: number): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.activeColumnResize = columnIndex;
+    this.columnResizeStartX = event.clientX;
+    this.columnResizeStartWidth = this.columnWidths()[columnIndex];
+
+    const target = event.currentTarget as HTMLElement | null;
+    target?.setPointerCapture?.(event.pointerId);
+  }
+
+  resetColumnWidth(columnIndex: number): void {
+    const defaults = [180, 720, 140, 100];
+    this.columnWidths.update((widths) =>
+      widths.map((width, index) => index === columnIndex ? defaults[index] : width)
+    );
+  }
+
+  startRowResize(event: PointerEvent, treeId: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.activeRowResizeId = treeId;
+    this.rowResizeStartY = event.clientY;
+    this.rowResizeStartHeight = this.rowHeight(treeId);
+
+    const target = event.currentTarget as HTMLElement | null;
+    target?.setPointerCapture?.(event.pointerId);
+  }
+
+  resetRowHeight(treeId: string): void {
+    this.rowHeights.update((heights) => {
+      const next = { ...heights };
+      delete next[treeId];
+      return next;
+    });
+  }
+
   startBrowserResize(event: PointerEvent): void {
     event.preventDefault();
     this.isResizingBrowser = true;
@@ -239,6 +353,29 @@ export class FaultTreePageComponent {
 
   @HostListener('window:pointermove', ['$event'])
   onBrowserResizeMove(event: PointerEvent): void {
+    if (this.activeColumnResize !== null) {
+      const index = this.activeColumnResize;
+      const delta = event.clientX - this.columnResizeStartX;
+      const minWidths = [100, 180, 105, 80];
+      const maxWidth = index === 1 ? 1200 : 420;
+      const nextWidth = Math.max(minWidths[index], Math.min(maxWidth, this.columnResizeStartWidth + delta));
+
+      this.columnWidths.update((widths) =>
+        widths.map((width, columnIndex) =>
+          columnIndex === index ? Math.round(nextWidth) : width
+        )
+      );
+      return;
+    }
+
+    if (this.activeRowResizeId) {
+      const treeId = this.activeRowResizeId;
+      const delta = event.clientY - this.rowResizeStartY;
+      const nextHeight = Math.max(26, Math.min(120, this.rowResizeStartHeight + delta));
+      this.rowHeights.update((heights) => ({ ...heights, [treeId]: Math.round(nextHeight) }));
+      return;
+    }
+
     if (!this.isResizingBrowser) return;
 
     const delta = this.resizeStartY - event.clientY;
@@ -251,9 +388,19 @@ export class FaultTreePageComponent {
 
   @HostListener('window:pointerup')
   stopBrowserResize(): void {
-    if (!this.isResizingBrowser) return;
-    this.isResizingBrowser = false;
-    requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
+    const resizedTable = this.activeColumnResize !== null || this.activeRowResizeId !== null;
+    this.activeColumnResize = null;
+    this.activeRowResizeId = null;
+
+    if (this.isResizingBrowser) {
+      this.isResizingBrowser = false;
+      requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
+      return;
+    }
+
+    if (resizedTable) {
+      requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
+    }
   }
 
   @HostListener('window:keydown', ['$event'])
