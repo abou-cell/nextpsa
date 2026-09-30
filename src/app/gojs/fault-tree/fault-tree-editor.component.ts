@@ -1137,6 +1137,13 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
      * The gate body is intentionally separate from the GoJS connection ports.
      * NAND / NOR use the same gate body plus the inversion bubble above it.
      */
+    const tagFillBinding = () =>
+      new go.Binding(
+        'fill',
+        'tagColor',
+        (tagColor: string | null | undefined) => tagColor || '#ffffff'
+      );
+
     const gateArtwork = (gateType: GateType, includeOutputPort = true) => {
       const kofn = isKofNGate(gateType);
 
@@ -1170,25 +1177,30 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
             alignment: new go.Spot(0.5, 0.62),
             visible: !kofn,
             geometryString: gateGeometry(gateType)
-          }
+          },
+          tagFillBinding()
         ),
         $(go.Shape, 'Circle', {
-          desiredSize: new go.Size(6, 6),
-          fill: '#ffffff',
-          stroke: '#111111',
-          strokeWidth: 1.1,
-          alignment: new go.Spot(0.5, 0, 0, 3),
-          visible: hasOutputNegationBubble(gateType)
-        }),
+            desiredSize: new go.Size(6, 6),
+            fill: '#ffffff',
+            stroke: '#111111',
+            strokeWidth: 1.1,
+            alignment: new go.Spot(0.5, 0, 0, 3),
+            visible: hasOutputNegationBubble(gateType)
+          },
+          tagFillBinding()
+        ),
         $(go.Shape, 'Rectangle', {
-          desiredSize: new go.Size(28, 20),
-          fill: '#ffffff',
-          stroke: '#111111',
-          strokeWidth: 1.1,
-          alignment: new go.Spot(0.5, 0, 0, 0.8),
-          alignmentFocus: go.Spot.Top,
-          visible: kofn
-        }),
+            desiredSize: new go.Size(28, 20),
+            fill: '#ffffff',
+            stroke: '#111111',
+            strokeWidth: 1.1,
+            alignment: new go.Spot(0.5, 0, 0, 0.8),
+            alignmentFocus: go.Spot.Top,
+            visible: kofn
+          },
+          tagFillBinding()
+        ),
         $(go.TextBlock, {
             font: '8px Inter, sans-serif',
             stroke: '#111111',
@@ -1203,39 +1215,47 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     const basicCircleArtwork = () =>
       $(go.Shape, 'Circle', {
-        desiredSize: new go.Size(28, 28),
-        fill: '#ffffff',
-        stroke: '#111111',
-        strokeWidth: 1.2
-      });
+          desiredSize: new go.Size(28, 28),
+          fill: '#ffffff',
+          stroke: '#111111',
+          strokeWidth: 1.2
+        },
+        tagFillBinding()
+      );
 
     const diamondArtwork = () =>
       $(go.Shape, 'Diamond', {
-        desiredSize: new go.Size(26, 26),
-        fill: '#ffffff',
-        stroke: '#111111',
-        strokeWidth: 1.2
-      });
+          desiredSize: new go.Size(26, 26),
+          fill: '#ffffff',
+          stroke: '#111111',
+          strokeWidth: 1.2
+        },
+        tagFillBinding()
+      );
 
     const houseArtwork = () =>
       $(go.Shape, {
-        geometryString: HOUSE_EVENT_GEOMETRY,
-        desiredSize: new go.Size(28, 24),
-        stretch: go.Stretch.Fill,
-        fill: '#ffffff',
-        stroke: '#111111',
-        strokeWidth: 1.2
-      });
+          geometryString: HOUSE_EVENT_GEOMETRY,
+          desiredSize: new go.Size(28, 24),
+          stretch: go.Stretch.Fill,
+          fill: '#ffffff',
+          stroke: '#111111',
+          strokeWidth: 1.2
+        },
+        tagFillBinding()
+      );
 
     const transferArtwork = () =>
       $(go.Shape, {
-        geometryString: TRANSFER_GEOMETRY,
-        desiredSize: new go.Size(26, 26),
-        stretch: go.Stretch.Fill,
-        fill: '#ffffff',
-        stroke: '#111111',
-        strokeWidth: 1.2
-      });
+          geometryString: TRANSFER_GEOMETRY,
+          desiredSize: new go.Size(26, 26),
+          stretch: go.Stretch.Fill,
+          fill: '#ffffff',
+          stroke: '#111111',
+          strokeWidth: 1.2
+        },
+        tagFillBinding()
+      );
 
     const baseNodeProperties: Partial<go.Node> = {
       selectionAdorned: true,
