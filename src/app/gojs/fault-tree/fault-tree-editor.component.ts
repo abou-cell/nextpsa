@@ -52,9 +52,11 @@ class FaultTreeCommandHandler extends go.CommandHandler {
   cutAction?: () => boolean;
   copyAction?: () => boolean;
   pasteAction?: () => boolean;
+  tagAction?: () => boolean;
   canCutAction?: () => boolean;
   canCopyAction?: () => boolean;
   canPasteAction?: () => boolean;
+  canTagAction?: () => boolean;
 
   override canCutSelection(): boolean {
     if (this.canCutAction?.()) return true;
@@ -92,7 +94,6 @@ class FaultTreeCommandHandler extends go.CommandHandler {
     const modifier = Boolean(input?.control || input?.meta);
 
     // Explicitly route Ctrl/Cmd+X/C/V through the NextPSA FT clipboard.
-    // This avoids GoJS native clipboard behavior splitting a selected subtree.
     if (modifier && key === 'x' && this.canCutSelection()) {
       this.cutSelection();
       return;
@@ -105,6 +106,15 @@ class FaultTreeCommandHandler extends go.CommandHandler {
 
     if (modifier && key === 'v' && this.canPasteSelection()) {
       this.pasteSelection();
+      return;
+    }
+
+    // RiskSpectrum-style Tag shortcut. Ctrl/Cmd+T applies the currently
+    // selected tag colour to one selected component or a selected branch.
+    if (modifier && key === 't' && this.canTagAction?.()) {
+      const nativeEvent = input?.event as KeyboardEvent | null | undefined;
+      nativeEvent?.preventDefault();
+      this.tagAction?.();
       return;
     }
 
