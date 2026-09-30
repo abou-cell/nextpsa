@@ -581,7 +581,16 @@ class RiskSpectrumBranchLink extends go.Link {
     if (!fromPort || !toPort) return super.computePoints();
 
     const start = fromPort.getDocumentPoint(go.Spot.Center);
-    const end = toPort.getDocumentPoint(go.Spot.Center);
+    const rawEnd = toPort.getDocumentPoint(go.Spot.Center);
+
+    // RiskSpectrum-style NOT marker:
+    // when the child input is negated, the visible 8 px bubble sits immediately
+    // above the record border. Terminate the incoming branch at the TOP of that
+    // bubble so the line never runs through its white interior.
+    const childData = this.toNode?.data as FaultTreeNodeData | undefined;
+    const end = childData?.negated
+      ? new go.Point(rawEnd.x, rawEnd.y - 8)
+      : rawEnd;
 
     if (
       !Number.isFinite(start.x) ||
@@ -1257,6 +1266,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           stroke: '#111111',
           strokeWidth: 1.1,
           alignment: go.Spot.Top,
+          // Keep the marker outside the record box: its bottom edge touches
+          // the top border instead of placing half of the circle inside it.
+          alignmentFocus: go.Spot.Bottom,
           visible: false
         },
         new go.Binding('visible', 'negated', Boolean)
