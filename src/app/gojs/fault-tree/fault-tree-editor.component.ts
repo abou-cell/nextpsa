@@ -1083,11 +1083,15 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           height: 69
         },
         $(go.Shape, 'RoundedRectangle', {
-          fill,
-          stroke,
-          strokeWidth: 1,
-          parameter1: 2
-        }),
+            fill,
+            stroke,
+            strokeWidth: 1,
+            parameter1: 2
+          },
+          new go.Binding('fill', 'tagColor', (tagColor: string | null | undefined) =>
+            tagColor || fill
+          )
+        ),
         $(go.Panel, 'Table',
           {
             width: 132,
@@ -1334,6 +1338,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         menuButton('Select branch', 'SELECT_BRANCH'),
         menuButton('Select inputs', 'SELECT_INPUTS'),
         menuSeparator(),
+        menuButton('Tag     Ctrl+T', 'TAG'),
+        menuButton('Untag', 'UNTAG'),
+        menuSeparator(),
         menuButton('Cut     Ctrl+X', 'CUT'),
         menuButton('Copy    Ctrl+C', 'COPY'),
         menuButton('Paste   Ctrl+V', 'PASTE'),
@@ -1364,6 +1371,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         menuSeparator(),
         menuButton('Select branch', 'SELECT_BRANCH', false),
         menuButton('Select inputs', 'SELECT_INPUTS', false),
+        menuSeparator(),
+        menuButton('Tag     Ctrl+T', 'TAG'),
+        menuButton('Untag', 'UNTAG'),
         menuSeparator(),
         menuButton('Cut     Ctrl+X', 'CUT'),
         menuButton('Copy    Ctrl+C', 'COPY'),
@@ -1464,6 +1474,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     commandHandler.cutAction = () => this.cutFaultTreeSelection(diagram);
     commandHandler.copyAction = () => this.copyFaultTreeSelection(diagram);
     commandHandler.pasteAction = () => this.pasteFaultTreeSelection(diagram);
+    commandHandler.tagAction = () => this.tagSelectedNodes(diagram, this.activeTagColor);
 
     const hasCopyableSelection = (): boolean => {
       let hasCopyableNode = false;
@@ -1482,6 +1493,13 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     commandHandler.canCopyAction = hasCopyableSelection;
     commandHandler.canPasteAction = () =>
       Boolean(this.faultTreeClipboard?.nodes.length);
+    commandHandler.canTagAction = () => {
+      let hasSelectedNode = false;
+      diagram.selection.each((part) => {
+        if (part instanceof go.Node) hasSelectedNode = true;
+      });
+      return hasSelectedNode;
+    };
     diagram.commandHandler = commandHandler;
 
 
@@ -2944,7 +2962,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     if (!diagram) return;
 
     const preserveExistingSelection =
-      (action === 'CUT' || action === 'COPY') &&
+      (action === 'CUT' ||
+        action === 'COPY' ||
+        action === 'TAG' ||
+        action === 'UNTAG') &&
       node.isSelected;
 
     if (!preserveExistingSelection) {
@@ -2997,6 +3018,14 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         node.findNodesOutOf().each((child) => {
           child.isSelected = true;
         });
+        return;
+
+      case 'TAG':
+        this.tagSelectedNodes(diagram, this.activeTagColor);
+        return;
+
+      case 'UNTAG':
+        this.tagSelectedNodes(diagram, null);
         return;
 
       case 'CUT':
