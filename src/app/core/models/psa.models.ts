@@ -111,6 +111,8 @@ export interface FaultTreeModel {
   id: string;
   description: string;
   topGateId: string;
+  /** Optional UI tag colour used by the project Fault Tree browser. */
+  tagColor?: string | null;
   nodes: FaultTreeNodeData[];
   links: FaultTreeLinkData[];
 }

@@ -956,6 +956,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   @Output() readonly selectedNodeChange = new EventEmitter<FaultTreeNodeData | null>();
   @Output() readonly recordOpen = new EventEmitter<FaultTreeNodeData>();
   @Output() readonly changeNodeEvent = new EventEmitter<FaultTreeNodeData>();
+  @Output() readonly tagColorChange = new EventEmitter<string>();
 
   private diagram?: go.Diagram;
   private palette?: go.Palette;
@@ -1127,6 +1128,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   selectTagColor(color: string): void {
     this.activeTagColor = color;
     this.tagPaletteOpen = false;
+    this.tagColorChange.emit(color);
   }
 
   private tagSelectedNodes(

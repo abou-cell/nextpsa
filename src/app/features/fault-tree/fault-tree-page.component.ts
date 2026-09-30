@@ -54,7 +54,8 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
             [model]="repository.faultTree()"
             (selectedNodeChange)="onSelection($event)"
             (recordOpen)="openRecord($event)"
-            (changeNodeEvent)="openChangeNode($event)">
+            (changeNodeEvent)="openChangeNode($event)"
+            (tagColorChange)="onEditorTagColorChange($event)">
           </app-fault-tree-editor>
         </main>
 
@@ -85,7 +86,9 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
               <tbody>
                 <tr
                   *ngFor="let tree of projectFaultTrees()"
-                  [class.selected]="tree.id === repository.faultTree().id"
+                  [class.selected]="tree.id === selectedTableTreeId()"
+                  [class.tagged]="!!tree.tagColor"
+                  [style.background-color]="tree.tagColor || null"
                   tabindex="0"
                   (click)="selectFaultTree(tree)"
                   (keydown.enter)="selectFaultTree(tree)"
@@ -156,8 +159,9 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .ft-table thead th { position: sticky; top: 0; z-index: 3; background: #f3f6fa; color: #1f2937; font-weight: 800; }
     .ft-table tbody tr { cursor: pointer; background: #fff; }
     .ft-table tbody tr:hover { background: #f6f9fd; }
-    .ft-table tbody tr.selected { background: #edf4ff; box-shadow: inset 3px 0 0 var(--nps-blue); }
+    .ft-table tbody tr.selected { box-shadow: inset 3px 0 0 var(--nps-blue); }
     .ft-table tbody tr.selected .ft-id { color: var(--nps-blue); font-weight: 800; }
+    .ft-table tbody tr.tagged td { font-weight: 600; }
     .ft-id { font-weight: 700; }
     .ft-description { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -175,6 +179,8 @@ export class FaultTreePageComponent {
   private resizeStartHeight = 178;
 
   readonly projectFaultTrees = computed(() => this.repository.faultTrees().slice(0, 3));
+  readonly selectedTableTreeId = signal<string | null>(null);
+  readonly tableTagColor = signal('#fff200');
   readonly selectedNode = signal<FaultTreeNodeData | null>(null);
   readonly openGate = signal<GateRecord | null>(null);
   readonly openBasicEvent = signal<BasicEventRecord | null>(null);
@@ -239,11 +245,29 @@ export class FaultTreePageComponent {
     requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
   }
 
+  @HostListener('window:keydown', ['$event'])
+  onTableTagShortcut(event: KeyboardEvent): void {
+    if (!event.altKey || event.key.toLowerCase() !== 't') return;
+    if (this.selectedNode()) return;
+
+    const treeId = this.selectedTableTreeId();
+    if (!treeId) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.repository.setFaultTreeTagColor(treeId, this.tableTagColor());
+  }
+
+  onEditorTagColorChange(color: string): void {
+    this.tableTagColor.set(color);
+  }
+
   activateWorkspace(id: number): void {
     this.workspaceService.activateWorkspace(id);
     const workspace = this.workspaceService.activeWorkspace();
     if (workspace) this.repository.selectFaultTree(workspace.faultTreeId);
     this.selectedNode.set(null);
+    this.selectedTableTreeId.set(null);
   }
 
   closeWorkspace(event: MouseEvent, id: number): void {
@@ -252,9 +276,11 @@ export class FaultTreePageComponent {
     const workspace = this.workspaceService.activeWorkspace();
     if (workspace) this.repository.selectFaultTree(workspace.faultTreeId);
     this.selectedNode.set(null);
+    this.selectedTableTreeId.set(null);
   }
 
   selectFaultTree(tree: FaultTreeModel): void {
+    this.selectedTableTreeId.set(tree.id);
     this.workspaceService.setActiveFaultTree(tree.id);
     this.repository.selectFaultTree(tree.id);
     this.selectedNode.set(null);
