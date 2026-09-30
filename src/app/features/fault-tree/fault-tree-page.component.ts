@@ -387,7 +387,9 @@ export class FaultTreePageComponent {
 
     if (this.activeRowResizeId) {
       const delta = event.clientY - this.rowResizeStartY;
-      const nextHeight = Math.max(26, Math.min(120, this.rowResizeStartHeight + delta));
+      // Default row height is 38 px. Allow compression down to 23 px,
+      // i.e. about -40%, while keeping the text and resize handle usable.
+      const nextHeight = Math.max(23, Math.min(120, this.rowResizeStartHeight + delta));
 
       this.rowHeights.update((heights) => {
         const next = { ...heights };
@@ -432,12 +434,20 @@ export class FaultTreePageComponent {
     if (!event.altKey || event.key.toLowerCase() !== 't') return;
     if (this.selectedNode()) return;
 
-    const treeId = this.selectedTableTreeId();
-    if (!treeId) return;
+    const selectedIds = this.selectedTableTreeIds();
+    const fallbackId = this.selectedTableTreeId();
+    const targetIds = selectedIds.length
+      ? selectedIds
+      : (fallbackId ? [fallbackId] : []);
+
+    if (!targetIds.length) return;
 
     event.preventDefault();
     event.stopPropagation();
-    this.repository.setFaultTreeTagColor(treeId, this.tableTagColor());
+
+    targetIds.forEach((treeId) =>
+      this.repository.setFaultTreeTagColor(treeId, this.tableTagColor())
+    );
   }
 
   onEditorTagColorChange(color: string): void {
