@@ -98,23 +98,27 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
           <strong>Fault Trees in project (3)</strong>
           <span>Click a row to display that Fault Tree in the active workspace.</span>
         </div>
-        <div class="ft-table">
-          <div class="ft-row ft-header">
-            <span>ID Fault Tree</span>
-            <span>Description</span>
-          </div>
-          <div
-            class="ft-row ft-data-row"
-            *ngFor="let tree of projectFaultTrees()"
-            [class.selected]="tree.id === repository.faultTree().id"
-            role="button"
-            tabindex="0"
-            (click)="selectFaultTree(tree)"
-            (keydown.enter)="selectFaultTree(tree)"
-            (keydown.space)="selectFaultTree(tree)">
-            <strong class="ft-id">{{ tree.id }}</strong>
-            <span class="ft-description">{{ tree.description }}</span>
-          </div>
+        <div class="ft-table-wrap">
+          <table class="ft-table" aria-label="Fault Trees in project">
+            <thead>
+              <tr>
+                <th scope="col">ID Fault Tree</th>
+                <th scope="col">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                *ngFor="let tree of projectFaultTrees()"
+                [class.selected]="tree.id === repository.faultTree().id"
+                tabindex="0"
+                (click)="selectFaultTree(tree)"
+                (keydown.enter)="selectFaultTree(tree)"
+                (keydown.space)="selectFaultTree(tree)">
+                <td class="ft-id">{{ tree.id }}</td>
+                <td class="ft-description">{{ tree.description }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </section>
     </section>
@@ -178,16 +182,16 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .browser-title { height: 38px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-bottom: 1px solid var(--nps-border); }
     .browser-title strong { font-size: 10px; }
     .browser-title span { color: var(--nps-text-muted); font-size: 9px; }
-    .ft-table { height: calc(100% - 38px); overflow: auto; }
-    .ft-row { width: 100%; height: 38px; display: grid; grid-template-columns: 160px minmax(0, 1fr); align-items: stretch; border-bottom: 1px solid #dfe6ee; background: #fff; color: #111827; text-align: left; padding: 0; }
-    .ft-data-row { cursor: pointer; }
-    .ft-data-row:hover { background: #f6f9fd; }
-    .ft-row > * { min-width: 0; display: flex; align-items: center; padding: 0 14px; border-right: 1px solid #dfe6ee; font-size: 11px; color: #111827 !important; opacity: 1 !important; visibility: visible !important; }
-    .ft-row > *:last-child { border-right: 0; }
-    .ft-header { position: sticky; top: 0; z-index: 3; background: #f3f6fa; font-weight: 800; }
-    .ft-header span { color: #1f2937 !important; }
-    .ft-data-row.selected { background: #edf4ff; box-shadow: inset 3px 0 0 var(--nps-blue); }
-    .ft-data-row.selected .ft-id { color: var(--nps-blue) !important; font-weight: 800; }
+    .ft-table-wrap { height: calc(100% - 38px); overflow: auto; background: #fff; }
+    .ft-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: #fff; color: #111827; }
+    .ft-table th, .ft-table td { height: 38px; padding: 0 14px; border-bottom: 1px solid #dfe6ee; border-right: 1px solid #dfe6ee; text-align: left; vertical-align: middle; font-size: 11px; color: #111827; background: transparent; opacity: 1; visibility: visible; }
+    .ft-table th:last-child, .ft-table td:last-child { border-right: 0; }
+    .ft-table th:first-child, .ft-table td:first-child { width: 160px; }
+    .ft-table thead th { position: sticky; top: 0; z-index: 3; background: #f3f6fa; color: #1f2937; font-weight: 800; }
+    .ft-table tbody tr { cursor: pointer; background: #fff; }
+    .ft-table tbody tr:hover { background: #f6f9fd; }
+    .ft-table tbody tr.selected { background: #edf4ff; box-shadow: inset 3px 0 0 var(--nps-blue); }
+    .ft-table tbody tr.selected .ft-id { color: var(--nps-blue); font-weight: 800; }
     .ft-id { font-weight: 700; }
     .ft-description { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
