@@ -1023,10 +1023,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const node = nodes[0];
     const data = node.data as FaultTreeNodeData;
 
-    // Negation is represented on the incoming relation. The Top Event (and any
-    // detached node without a parent) therefore cannot be toggled.
+    // Top Event has no incoming logical relation and cannot be negated.
+    // Detached components are allowed: their node-level negate state is kept
+    // and will be inherited by the relation when they are attached later.
     if (data.category === 'TOP_EVENT') return null;
-    if (!node.findLinksInto().first()) return null;
 
     return node;
   }
@@ -1045,9 +1045,12 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     if (!node) return false;
 
     const incoming = node.findLinksInto().first();
+    const nodeData = node.data as FaultTreeNodeData;
+    const linkData = incoming?.data as FaultTreeLinkData | undefined;
+
     return Boolean(
-      (node.data as FaultTreeNodeData).negated ??
-      (incoming?.data as FaultTreeLinkData | undefined)?.negated
+      nodeData.negated ??
+      linkData?.negated
     );
   }
 
@@ -1064,30 +1067,35 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const diagram = node.diagram;
     if (!diagram) return false;
 
-    const incoming = node.findLinksInto().first();
-    if (!incoming) return false;
-
-    const graphModel = diagram.model as go.GraphLinksModel;
     const nodeData = node.data as FaultTreeNodeData;
-    const linkData = incoming.data as FaultTreeLinkData;
-    const next = !Boolean(linkData.negated);
+    if (nodeData.category === 'TOP_EVENT') return false;
+
+    const incoming = node.findLinksInto().first();
+    const linkData = incoming?.data as FaultTreeLinkData | undefined;
+    const current = Boolean(nodeData.negated ?? linkData?.negated);
+    const next = !current;
+    const graphModel = diagram.model as go.GraphLinksModel;
 
     diagram.startTransaction(next ? 'Negate fault-tree node' : 'Unnegate fault-tree node');
 
-    // Keep the logical relation as the authoritative quantification state and
-    // mirror the same state on the node for visual/menu binding.
-    graphModel.setDataProperty(linkData, 'negated', next);
+    // Node state drives the visible NOT marker. When attached, mirror the same
+    // state to the incoming relation used by the FT logical model.
     graphModel.setDataProperty(nodeData, 'negated', next);
+    if (linkData) {
+      graphModel.setDataProperty(linkData, 'negated', next);
+    }
 
     diagram.commitTransaction(next ? 'Negate fault-tree node' : 'Unnegate fault-tree node');
 
     const sourceNode = this.model.nodes.find((item) => item.key === nodeData.key);
     if (sourceNode) sourceNode.negated = next;
 
-    const sourceLink = this.model.links.find(
-      (item) => String(item.key) === String(linkData.key)
-    );
-    if (sourceLink) sourceLink.negated = next;
+    if (linkData) {
+      const sourceLink = this.model.links.find(
+        (item) => String(item.key) === String(linkData.key)
+      );
+      if (sourceLink) sourceLink.negated = next;
+    }
 
     return true;
   }
@@ -1473,6 +1481,16 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
             this.handleContextAction('NEGATE', node);
           }
         },
+        new go.Binding(
+          'isEnabled',
+          'category',
+          (category: FaultTreeNodeData['category']) => category !== 'TOP_EVENT'
+        ),
+        new go.Binding(
+          'opacity',
+          'category',
+          (category: FaultTreeNodeData['category']) => category === 'TOP_EVENT' ? 0.42 : 1
+        ),
         $(go.TextBlock, {
             width: 176,
             margin: new go.Margin(3, 8),
