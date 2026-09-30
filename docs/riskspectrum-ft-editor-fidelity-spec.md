@@ -588,3 +588,31 @@ Rules:
 - therefore Cut can never leave the descendants of a standalone branch scattered in the workspace.
 
 Paste after Cut follows the normal smart-paste rules: attach to a selected Gate/branch, or paste detached below the FT if no target is selected.
+
+
+## RiskSpectrum-style color tags
+
+The Fault Tree toolbar provides a compact RiskSpectrum-style tag-colour selector next to **Fit**.
+
+Available tag colours:
+
+- yellow;
+- salmon;
+- sand;
+- cyan;
+- blue-cyan.
+
+Interaction:
+
+- select one FT component and press `Ctrl/Cmd+T` to apply the currently active tag colour;
+- after **Select branch**, `Ctrl/Cmd+T` applies the colour to every selected node in that branch;
+- context-menu **Tag** applies the active colour;
+- context-menu **Untag** removes the colour;
+- right-clicking an unselected component before Tag/Untag acts on that component only;
+- right-clicking a component already inside a selected branch preserves the branch selection.
+
+Presentation rule:
+
+- only the record box background is coloured;
+- Gate/BE/HE/Transfer symbols and branch links keep the normal RiskSpectrum drawing colours;
+- tag colour is stored on the FT node data as `tagColor`, so Copy/Cut/Paste preserve it.
