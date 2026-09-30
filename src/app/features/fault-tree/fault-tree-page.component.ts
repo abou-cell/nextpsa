@@ -55,8 +55,43 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
             (selectedNodeChange)="onSelection($event)"
             (recordOpen)="openRecord($event)"
             (changeNodeEvent)="openChangeNode($event)"
-            (tagColorChange)="onEditorTagColorChange($event)">
+            (tagColorChange)="onEditorTagColorChange($event)"
+            (propertiesRequested)="openPropertiesWindow()">
           </app-fault-tree-editor>
+
+          <aside *ngIf="propertiesOpen()" class="properties-window" aria-label="Properties">
+            <div class="properties-window-header">
+              <strong>Properties</strong>
+              <button
+                type="button"
+                class="properties-close"
+                title="Close Properties"
+                aria-label="Close Properties"
+                (click)="closePropertiesWindow()">×</button>
+            </div>
+
+            <ng-container *ngIf="selectedNode() as node; else noPropertySelection">
+              <div class="property-section">
+                <h3>General</h3>
+                <div class="property-row"><span>ID</span><strong>{{ node.id }}</strong></div>
+                <div class="property-row"><span>Description</span><strong>{{ node.description }}</strong></div>
+                <div class="property-row"><span>Category</span><strong>{{ node.category }}</strong></div>
+                <div class="property-row"><span>State</span><strong>{{ node.state }}</strong></div>
+                <div class="property-row" *ngIf="node.gateType"><span>Gate type</span><strong>{{ node.gateType }}</strong></div>
+                <div class="property-row" *ngIf="node.reliabilityModel !== undefined"><span>Reliability</span><strong>Type {{ node.reliabilityModel }}</strong></div>
+              </div>
+              <div class="property-section">
+                <h3>Relations</h3>
+                <div class="property-row"><span>Direct inputs</span><strong>{{ selectedDirectInputs().length }}</strong></div>
+                <div class="property-row"><span>Underlying BE</span><strong>{{ selectedBasicEvents().length }}</strong></div>
+              </div>
+              <button type="button" class="open-record" (click)="openRecord(node)">Open record</button>
+            </ng-container>
+
+            <ng-template #noPropertySelection>
+              <div class="properties-empty">Select a Gate, Basic Event, House Event or Transfer in the FT editor.</div>
+            </ng-template>
+          </aside>
         </main>
 
         <div
@@ -203,7 +238,7 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .workspace-actions button.primary { background: var(--nps-blue); color: #fff; border-color: var(--nps-blue); }
 
     .workspace-body { min-height: 0; display: grid; background: var(--nps-app-bg); overflow: hidden; }
-    .diagram-panel { min-width: 0; min-height: 0; overflow: hidden; }
+    .diagram-panel { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
     .browser-resizer { position: relative; z-index: 8; cursor: row-resize; background: #eef3f8; border-top: 1px solid #d5dee8; border-bottom: 1px solid #d5dee8; touch-action: none; }
     .browser-resizer:hover, .browser-resizer.dragging { background: #dbeafe; }
     .browser-resizer span { position: absolute; left: 50%; top: 50%; width: 42px; height: 3px; border-radius: 999px; background: #94a3b8; transform: translate(-50%, -50%); }
@@ -215,7 +250,7 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .tagged-count { margin-left: 8px; color: var(--nps-text-muted); font-weight: 600; }
     .ft-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: #fff; color: #111827; }
     .ft-table th, .ft-table td { position: relative; min-height: 24px; padding: 0 14px; border-bottom: 1px solid #dfe6ee; border-right: 1px solid #dfe6ee; text-align: left; vertical-align: middle; font-size: 11px; color: #111827; background: transparent; opacity: 1; visibility: visible; }
-    .ft-table th { height: 38px; }
+    .ft-table th { height: 25px; }
     .ft-table th:last-child, .ft-table td:last-child { border-right: 0; }
     .ft-table thead th { position: sticky; top: 0; z-index: 3; background: #f3f6fa; color: #1f2937; font-weight: 800; }
     .column-resizer { position: absolute; top: 0; right: -4px; z-index: 6; width: 8px; height: 100%; cursor: col-resize; touch-action: none; }
@@ -232,6 +267,52 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .ft-id { font-weight: 700; }
     .ft-description { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+    .properties-window {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 30;
+      width: 310px;
+      max-height: calc(100% - 20px);
+      overflow: auto;
+      background: #fff;
+      border: 1px solid var(--nps-border);
+      border-radius: 8px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, .18);
+    }
+    .properties-window-header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 8px 0 12px;
+      background: #f8fafc;
+      border-bottom: 1px solid var(--nps-border);
+    }
+    .properties-window-header strong { font-size: 11px; }
+    .properties-close {
+      width: 28px;
+      height: 26px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: #64748b;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .properties-close:hover { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }
+    .property-section { padding: 12px; border-bottom: 1px solid var(--nps-border); }
+    .property-section h3 { margin: 0 0 8px; color: var(--nps-text-muted); font-size: 9px; letter-spacing: .07em; text-transform: uppercase; }
+    .property-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; padding: 5px 0; font-size: 10px; }
+    .property-row span { color: var(--nps-text-muted); }
+    .property-row strong { overflow-wrap: anywhere; }
+    .properties-empty { padding: 18px 12px; color: var(--nps-text-muted); font-size: 10px; line-height: 1.5; }
+    .open-record { margin: 12px; height: 30px; border: 1px solid var(--nps-blue); border-radius: 7px; background: var(--nps-blue); color: #fff; padding: 0 10px; font-size: 10px; cursor: pointer; }
+
     @media (max-width: 1150px) {
       .workspace-select { min-width: 132px; }
     }
@@ -241,6 +322,7 @@ export class FaultTreePageComponent {
   @ViewChild('faultTreeEditor') private faultTreeEditor?: FaultTreeEditorComponent;
 
   readonly browserHeight = signal(178);
+  readonly propertiesOpen = signal(false);
   readonly columnWidths = signal([180, 720, 140, 100]);
   readonly rowHeights = signal<Record<string, number>>({});
   readonly tableMinWidth = computed(() =>
@@ -304,6 +386,14 @@ export class FaultTreePageComponent {
 
   isTableRowSelected(treeId: string): boolean {
     return this.selectedTableTreeIds().includes(treeId);
+  }
+
+  openPropertiesWindow(): void {
+    this.propertiesOpen.set(true);
+  }
+
+  closePropertiesWindow(): void {
+    this.propertiesOpen.set(false);
   }
 
   rowHeight(treeId: string): number {

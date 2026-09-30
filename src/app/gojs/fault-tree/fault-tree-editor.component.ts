@@ -709,6 +709,19 @@ class RiskSpectrumBranchLink extends go.Link {
                 <path d="M13 2v5M4 7h18M4 7v9M13 7v9M22 7v9"></path>
               </svg>
             </button>
+            <button
+              type="button"
+              class="properties-toggle"
+              title="Open properties"
+              aria-label="Open Properties window"
+              (click)="propertiesRequested.emit()">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5h10M18 5h2M4 12h2M10 12h10M4 19h7M15 19h5"></path>
+                <circle cx="16" cy="5" r="2"></circle>
+                <circle cx="8" cy="12" r="2"></circle>
+                <circle cx="13" cy="19" r="2"></circle>
+              </svg>
+            </button>
           </div>
           <div class="toolbar-group push-right">
             <span class="status-dot"></span>
@@ -882,6 +895,23 @@ class RiskSpectrumBranchLink extends go.Link {
       background: #eaf2ff;
       box-shadow: inset 0 0 0 1px #b7d0fb;
     }
+    .toolbar-group button.properties-toggle {
+      width: 34px;
+      min-width: 34px;
+      padding: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .toolbar-group button.properties-toggle svg {
+      width: 19px;
+      height: 19px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
     .toolbar-separator { width: 1px; height: 20px; background: var(--nps-border); }
     .zoom-label { min-width: 38px; text-align: center; font-variant-numeric: tabular-nums; }
     .push-right { margin-left: auto; white-space: nowrap; }
@@ -957,6 +987,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   @Output() readonly recordOpen = new EventEmitter<FaultTreeNodeData>();
   @Output() readonly changeNodeEvent = new EventEmitter<FaultTreeNodeData>();
   @Output() readonly tagColorChange = new EventEmitter<string>();
+  @Output() readonly propertiesRequested = new EventEmitter<void>();
 
   private diagram?: go.Diagram;
   private palette?: go.Palette;
