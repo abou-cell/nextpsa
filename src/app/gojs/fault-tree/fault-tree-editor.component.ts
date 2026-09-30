@@ -634,6 +634,34 @@ class RiskSpectrumBranchLink extends go.Link {
             <span class="zoom-label">{{ zoomPercent }}%</span>
             <button type="button" title="Zoom in" (click)="zoom(0.1)">+</button>
             <button type="button" (click)="fit()">Fit</button>
+            <div class="tag-color-control" [class.open]="tagPaletteOpen">
+              <button
+                type="button"
+                class="tag-color-button"
+                title="Tag colour"
+                aria-label="Choose tag colour"
+                (click)="toggleTagPalette()">
+                <span class="tag-color-preview" [style.background]="activeTagColor"></span>
+                <span class="tag-color-chevron">▾</span>
+              </button>
+              <div class="tag-color-menu" role="menu" aria-label="Tag colour palette">
+                <button type="button" title="Yellow" (click)="selectTagColor('#fff200')">
+                  <span style="background:#fff200"></span>
+                </button>
+                <button type="button" title="Salmon" (click)="selectTagColor('#ffb4a8')">
+                  <span style="background:#ffb4a8"></span>
+                </button>
+                <button type="button" title="Sand" (click)="selectTagColor('#ffd6a3')">
+                  <span style="background:#ffd6a3"></span>
+                </button>
+                <button type="button" title="Cyan" (click)="selectTagColor('#73e3ea')">
+                  <span style="background:#73e3ea"></span>
+                </button>
+                <button type="button" title="Blue cyan" (click)="selectTagColor('#48c4d4')">
+                  <span style="background:#48c4d4"></span>
+                </button>
+              </div>
+            </div>
             <button
               type="button"
               class="layout-toggle"
@@ -726,6 +754,67 @@ class RiskSpectrumBranchLink extends go.Link {
       font-weight: 600;
     }
     .toolbar-group button:hover { background: #eef5ff; border-color: #b6cdf7; }
+    .tag-color-control {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    .toolbar-group button.tag-color-button {
+      width: 54px;
+      min-width: 54px;
+      padding: 3px 5px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 5px;
+    }
+    .tag-color-preview {
+      width: 30px;
+      height: 14px;
+      border: 1px solid #111827;
+      box-sizing: border-box;
+      display: inline-block;
+    }
+    .tag-color-chevron {
+      font-size: 10px;
+      line-height: 1;
+      color: #475569;
+    }
+    .tag-color-menu {
+      position: absolute;
+      top: 31px;
+      left: 0;
+      z-index: 50;
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 54px;
+      padding: 3px;
+      border: 1px solid #94a3b8;
+      background: #ffffff;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+    }
+    .tag-color-control.open .tag-color-menu { display: flex; }
+    .toolbar-group .tag-color-menu button {
+      width: 48px;
+      min-width: 48px;
+      height: 20px;
+      padding: 1px 3px;
+      border: 1px solid transparent;
+      border-radius: 0;
+      background: #ffffff;
+    }
+    .toolbar-group .tag-color-menu button:hover {
+      border-color: #64748b;
+      background: #f8fafc;
+    }
+    .tag-color-menu button span {
+      display: block;
+      width: 38px;
+      height: 14px;
+      border: 1px solid #334155;
+      box-sizing: border-box;
+    }
     .toolbar-group button.layout-toggle {
       width: 34px;
       min-width: 34px;
