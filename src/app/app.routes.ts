@@ -7,6 +7,11 @@ export const routes: Routes = [
       import('./features/dashboard/dashboard.component').then((m) => m.DashboardComponent)
   },
   {
+    path: 'standalone/fault-tree/:id',
+    loadComponent: () =>
+      import('./features/fault-tree/fault-tree-standalone.component').then((m) => m.FaultTreeStandaloneComponent)
+  },
+  {
     path: 'model/fault-tree/:id',
     loadComponent: () =>
       import('./features/fault-tree/fault-tree-page.component').then((m) => m.FaultTreePageComponent)

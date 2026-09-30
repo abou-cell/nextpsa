@@ -25,11 +25,15 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
         <div
           *ngFor="let workspace of workspaceService.workspaces()"
           class="workspace-tab"
-          [class.active]="workspace.id === workspaceService.activeWorkspaceId()">
+          [class.active]="workspace.id === workspaceService.activeWorkspaceId()"
+          [class.detaching]="workspace.id === draggingWorkspaceId() && workspaceDetachArmed">
           <button
             type="button"
             class="workspace-select"
-            (click)="activateWorkspace(workspace.id)">
+            title="Double-click to open in a new browser tab, or drag upward to detach"
+            (click)="activateWorkspace(workspace.id)"
+            (dblclick)="openWorkspaceInBrowserTab($event, workspace.id)"
+            (pointerdown)="startWorkspaceDetachDrag($event, workspace.id)">
             {{ workspace.label }}
           </button>
           <button
@@ -268,8 +272,10 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .workspace-tabs { min-height: 42px; display: flex; align-items: flex-end; gap: 4px; padding: 0 10px; background: #f3f7fb; border-bottom: 1px solid var(--nps-border); overflow-x: auto; }
     .workspace-tab { height: 36px; display: flex; align-items: stretch; border: 1px solid transparent; border-radius: 7px 7px 0 0; overflow: hidden; flex: 0 0 auto; }
     .workspace-tab.active { background: #fff; border-color: var(--nps-border); border-bottom-color: #fff; }
+    .workspace-tab.detaching { border-color: #60a5fa; background: #eff6ff; box-shadow: 0 -2px 0 #2563eb inset; }
     .workspace-select, .workspace-close { border: 0; background: transparent; cursor: pointer; font: inherit; }
-    .workspace-select { min-width: 150px; padding: 0 10px 0 12px; color: var(--nps-text-muted); font-size: 10px; text-align: left; }
+    .workspace-select { min-width: 150px; padding: 0 10px 0 12px; color: var(--nps-text-muted); font-size: 10px; text-align: left; cursor: grab; touch-action: none; }
+    .workspace-select:active { cursor: grabbing; }
     .workspace-tab.active .workspace-select { color: var(--nps-text); font-weight: 700; }
     .workspace-close { width: 28px; color: #7b8da1; font-size: 16px; }
     .workspace-close:hover:not(:disabled) { background: #fee2e2; color: #b91c1c; }
@@ -429,6 +435,9 @@ export class FaultTreePageComponent {
   @ViewChild('faultTreeEditor') private faultTreeEditor?: FaultTreeEditorComponent;
 
   readonly browserHeight = signal(178);
+  readonly draggingWorkspaceId = signal<number | null>(null);
+  workspaceDetachArmed = false;
+  private workspaceDragStartY = 0;
   readonly propertiesOpen = signal(false);
   readonly propertiesDocked = signal(false);
   readonly propertiesPosition = signal<{ x: number; y: number } | null>(null);
@@ -506,6 +515,36 @@ export class FaultTreePageComponent {
       this.repository.selectFaultTree(workspace.faultTreeId);
       this.selectedNode.set(null);
     });
+  }
+
+  startWorkspaceDetachDrag(event: PointerEvent, workspaceId: number): void {
+    if (event.button !== 0) return;
+
+    this.draggingWorkspaceId.set(workspaceId);
+    this.workspaceDragStartY = event.clientY;
+    this.workspaceDetachArmed = false;
+
+    const target = event.currentTarget as HTMLElement | null;
+    target?.setPointerCapture?.(event.pointerId);
+  }
+
+  openWorkspaceInBrowserTab(event: MouseEvent, workspaceId: number): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.openStandaloneWorkspace(workspaceId);
+  }
+
+  private openStandaloneWorkspace(workspaceId: number): void {
+    const workspace = this.workspaceService.workspaces().find((item) => item.id === workspaceId);
+    if (!workspace) return;
+
+    const base = `${window.location.origin}${window.location.pathname}`;
+    const url = `${base}#/standalone/fault-tree/${encodeURIComponent(workspace.faultTreeId)}`;
+    const tab = window.open(url, '_blank');
+
+    if (tab) {
+      tab.opener = null;
+    }
   }
 
   isTableRowSelected(treeId: string): boolean {
@@ -662,6 +701,11 @@ export class FaultTreePageComponent {
 
   @HostListener('window:pointermove', ['$event'])
   onBrowserResizeMove(event: PointerEvent): void {
+    if (this.draggingWorkspaceId() !== null) {
+      const upwardDistance = this.workspaceDragStartY - event.clientY;
+      this.workspaceDetachArmed = event.clientY <= 16 || upwardDistance >= 55;
+      return;
+    }
     if (this.isPendingDockedPropertiesDrag && this.propertiesDocked()) {
       const dx = event.clientX - this.dockedPropertiesPointerStartX;
       const dy = event.clientY - this.dockedPropertiesPointerStartY;
@@ -780,6 +824,17 @@ export class FaultTreePageComponent {
 
   @HostListener('window:pointerup')
   stopBrowserResize(): void {
+    const workspaceId = this.draggingWorkspaceId();
+    if (workspaceId !== null) {
+      const shouldDetach = this.workspaceDetachArmed;
+      this.draggingWorkspaceId.set(null);
+      this.workspaceDetachArmed = false;
+
+      if (shouldDetach) {
+        this.openStandaloneWorkspace(workspaceId);
+        return;
+      }
+    }
     this.isPendingDockedPropertiesDrag = false;
 
     if (this.isResizingProperties || this.isResizingDockedProperties) {

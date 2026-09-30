@@ -20,6 +20,7 @@ interface NavGroup {
   standalone: true,
   imports: [CommonModule, RouterLink, RouterLinkActive, RouterOutlet],
   template: `
+    <ng-container *ngIf="!isStandaloneRoute(); else standaloneRoute">
     <div class="app-shell">
       <header class="global-topbar">
         <a class="brand" routerLink="/dashboard">
@@ -72,6 +73,13 @@ interface NavGroup {
         <router-outlet></router-outlet>
       </main>
     </div>
+    </ng-container>
+
+    <ng-template #standaloneRoute>
+      <main class="standalone-content">
+        <router-outlet></router-outlet>
+      </main>
+    </ng-template>
   `,
   styles: [`
     :host { display: block; height: 100%; }
@@ -105,6 +113,7 @@ interface NavGroup {
     .cloud-status { color: #b5cbe1; }
     .cloud-status span { display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: #22c55e; }
     .content { grid-column: 2; grid-row: 2; min-width: 0; min-height: 0; overflow: auto; }
+    .standalone-content { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--nps-app-bg); }
     @media (max-width: 1100px) {
       .app-shell { grid-template-columns: 184px minmax(0,1fr); }
       .brand { width: 170px; }
@@ -117,6 +126,10 @@ export class AppComponent {
     private readonly router: Router,
     private readonly faultTreeWorkspaces: FaultTreeWorkspaceService
   ) {}
+
+  isStandaloneRoute(): boolean {
+    return this.router.url.startsWith('/standalone/');
+  }
 
   onNavDoubleClick(event: MouseEvent, item: NavItem): void {
     if (item.label !== 'Fault Tree') return;
