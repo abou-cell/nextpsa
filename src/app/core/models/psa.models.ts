@@ -93,6 +93,8 @@ export interface FaultTreeNodeData {
   siblingOrder?: number;
   /** Optional RiskSpectrum-style visual tag color applied to the record box. */
   tagColor?: string | null;
+  /** Node-level NOT/Negate state, mirrored to the incoming FT relation. */
+  negated?: boolean;
   recordType: 'GAT' | 'BEV' | 'HEV' | 'FTR';
 }
 
