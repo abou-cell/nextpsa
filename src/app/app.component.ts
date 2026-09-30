@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { Component } from '@angular/core';
+import { Router } from '@angular/router';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { FaultTreeWorkspaceService } from './features/fault-tree/fault-tree-workspace.service';
 
 interface NavItem {
   label: string;
@@ -53,7 +55,8 @@ interface NavGroup {
             <h2>{{ group.label }}</h2>
             <a *ngFor="let item of group.items"
               [routerLink]="item.route"
-              routerLinkActive="active">
+              routerLinkActive="active"
+              (dblclick)="onNavDoubleClick($event, item)">
               <span class="nav-icon">{{ item.icon }}</span>
               <span>{{ item.label }}</span>
             </a>
@@ -110,6 +113,19 @@ interface NavGroup {
   `]
 })
 export class AppComponent {
+  constructor(
+    private readonly router: Router,
+    private readonly faultTreeWorkspaces: FaultTreeWorkspaceService
+  ) {}
+
+  onNavDoubleClick(event: MouseEvent, item: NavItem): void {
+    if (item.label !== 'Fault Tree') return;
+
+    event.preventDefault();
+    this.faultTreeWorkspaces.openWorkspace();
+    void this.router.navigate(['/model/fault-tree/PTR-LOPC']);
+  }
+
   readonly navigation: readonly NavGroup[] = [
     {
       label: 'MODEL',

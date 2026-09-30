@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { computed, Injectable, signal } from '@angular/core';
 import {
   BasicEventRecord,
   ChangeNodeCandidate,
@@ -18,40 +18,100 @@ const audit = {
 
 @Injectable({ providedIn: 'root' })
 export class MockPsaRepository {
-  readonly faultTree = signal<FaultTreeModel>({
-    id: 'PTR-LOPC',
-    description: 'Loss of spent fuel pool cooling',
-    topGateId: 'PTR-LOPC',
-    nodes: [
-      { key: 'PTR-LOPC', category: 'TOP_EVENT', id: 'PTR-LOPC', description: 'Loss of spent fuel pool cooling', state: 'NORMAL', gateType: 'OR', recordType: 'GAT' },
-      { key: 'G-PTR-TRN', category: 'GATE', id: 'G-PTR-TRN', description: 'PTR cooling trains fail', state: 'NORMAL', gateType: 'AND', recordType: 'GAT' },
-      { key: 'G-AC-FAIL', category: 'GATE', id: 'G-AC-FAIL', description: 'Loss of AC supply', state: 'NORMAL', gateType: 'OR', recordType: 'GAT' },
-      { key: 'G-MAKEUP', category: 'GATE', id: 'G-MAKEUP', description: 'Loss of 2 of 3 make-up paths', state: 'NORMAL', gateType: 'KOFN', k: 2, recordType: 'GAT' },
-      { key: 'PTR101PO-FS', category: 'BASIC_EVENT', id: 'PTR101PO-FS', description: 'PTR train A pump fails to start', state: 'NORMAL', reliabilityModel: 3, symbol: 'CIRCLE', recordType: 'BEV' },
-      { key: 'PTR201PO-FS', category: 'BASIC_EVENT', id: 'PTR201PO-FS', description: 'PTR train B pump fails to start', state: 'NORMAL', reliabilityModel: 3, symbol: 'CIRCLE', recordType: 'BEV' },
-      { key: 'DG1-FS', category: 'BASIC_EVENT', id: 'DG1-FS', description: 'Diesel generator 1 fails to start', state: 'NORMAL', reliabilityModel: 3, symbol: 'CIRCLE', recordType: 'BEV' },
-      { key: 'DG2-FS', category: 'BASIC_EVENT', id: 'DG2-FS', description: 'Diesel generator 2 fails to start', state: 'NORMAL', reliabilityModel: 3, symbol: 'CIRCLE', recordType: 'BEV' },
-      { key: 'MAKEUP-01', category: 'BASIC_EVENT', id: 'MAKEUP-01', description: 'Make-up path 1 unavailable', state: 'NORMAL', reliabilityModel: 1, symbol: 'CIRCLE', recordType: 'BEV' },
-      { key: 'MAKEUP-02', category: 'BASIC_EVENT', id: 'MAKEUP-02', description: 'Make-up path 2 unavailable', state: 'NORMAL', reliabilityModel: 1, symbol: 'CIRCLE', recordType: 'BEV' },
-      { key: 'MAKEUP-03', category: 'BASIC_EVENT', id: 'MAKEUP-03', description: 'Make-up path 3 unavailable', state: 'NORMAL', reliabilityModel: 1, symbol: 'CIRCLE', recordType: 'BEV' },
-      { key: 'HE-MAINT', category: 'HOUSE_EVENT', id: 'HE-MAINT', description: 'Maintenance configuration active', state: 'FALSE', recordType: 'HEV' },
-      { key: 'XFR-AUX', category: 'TRANSFER', id: 'XFR-AUX', description: 'Transfer to auxiliary power FT', state: 'NORMAL', recordType: 'FTR' }
-    ],
-    links: [
-      { key: 'L1', from: 'PTR-LOPC', to: 'G-PTR-TRN' },
-      { key: 'L2', from: 'PTR-LOPC', to: 'G-AC-FAIL' },
-      { key: 'L3', from: 'PTR-LOPC', to: 'G-MAKEUP' },
-      { key: 'L4', from: 'PTR-LOPC', to: 'HE-MAINT' },
-      { key: 'L5', from: 'PTR-LOPC', to: 'XFR-AUX' },
-      { key: 'L6', from: 'G-PTR-TRN', to: 'PTR101PO-FS' },
-      { key: 'L7', from: 'G-PTR-TRN', to: 'PTR201PO-FS' },
-      { key: 'L8', from: 'G-AC-FAIL', to: 'DG1-FS' },
-      { key: 'L9', from: 'G-AC-FAIL', to: 'DG2-FS' },
-      { key: 'L10', from: 'G-MAKEUP', to: 'MAKEUP-01' },
-      { key: 'L11', from: 'G-MAKEUP', to: 'MAKEUP-02', negated: false },
-      { key: 'L12', from: 'G-MAKEUP', to: 'MAKEUP-03' }
-    ]
-  });
+  readonly faultTrees = signal<FaultTreeModel[]>([
+  {
+      id: 'PTR-LOPC',
+      description: 'Loss of spent fuel pool cooling',
+      topGateId: 'PTR-LOPC',
+      nodes: [
+        { key: 'PTR-LOPC', category: 'TOP_EVENT', id: 'PTR-LOPC', description: 'Loss of spent fuel pool cooling', state: 'NORMAL', gateType: 'OR', recordType: 'GAT' },
+        { key: 'G-PTR-TRN', category: 'GATE', id: 'G-PTR-TRN', description: 'PTR cooling trains fail', state: 'NORMAL', gateType: 'AND', recordType: 'GAT' },
+        { key: 'G-AC-FAIL', category: 'GATE', id: 'G-AC-FAIL', description: 'Loss of AC supply', state: 'NORMAL', gateType: 'OR', recordType: 'GAT' },
+        { key: 'G-MAKEUP', category: 'GATE', id: 'G-MAKEUP', description: 'Loss of 2 of 3 make-up paths', state: 'NORMAL', gateType: 'KOFN', k: 2, recordType: 'GAT' },
+        { key: 'PTR101PO-FS', category: 'BASIC_EVENT', id: 'PTR101PO-FS', description: 'PTR train A pump fails to start', state: 'NORMAL', reliabilityModel: 3, symbol: 'CIRCLE', recordType: 'BEV' },
+        { key: 'PTR201PO-FS', category: 'BASIC_EVENT', id: 'PTR201PO-FS', description: 'PTR train B pump fails to start', state: 'NORMAL', reliabilityModel: 3, symbol: 'CIRCLE', recordType: 'BEV' },
+        { key: 'DG1-FS', category: 'BASIC_EVENT', id: 'DG1-FS', description: 'Diesel generator 1 fails to start', state: 'NORMAL', reliabilityModel: 3, symbol: 'CIRCLE', recordType: 'BEV' },
+        { key: 'DG2-FS', category: 'BASIC_EVENT', id: 'DG2-FS', description: 'Diesel generator 2 fails to start', state: 'NORMAL', reliabilityModel: 3, symbol: 'CIRCLE', recordType: 'BEV' },
+        { key: 'MAKEUP-01', category: 'BASIC_EVENT', id: 'MAKEUP-01', description: 'Make-up path 1 unavailable', state: 'NORMAL', reliabilityModel: 1, symbol: 'CIRCLE', recordType: 'BEV' },
+        { key: 'MAKEUP-02', category: 'BASIC_EVENT', id: 'MAKEUP-02', description: 'Make-up path 2 unavailable', state: 'NORMAL', reliabilityModel: 1, symbol: 'CIRCLE', recordType: 'BEV' },
+        { key: 'MAKEUP-03', category: 'BASIC_EVENT', id: 'MAKEUP-03', description: 'Make-up path 3 unavailable', state: 'NORMAL', reliabilityModel: 1, symbol: 'CIRCLE', recordType: 'BEV' },
+        { key: 'HE-MAINT', category: 'HOUSE_EVENT', id: 'HE-MAINT', description: 'Maintenance configuration active', state: 'FALSE', recordType: 'HEV' },
+        { key: 'XFR-AUX', category: 'TRANSFER', id: 'XFR-AUX', description: 'Transfer to auxiliary power FT', state: 'NORMAL', recordType: 'FTR' }
+      ],
+      links: [
+        { key: 'L1', from: 'PTR-LOPC', to: 'G-PTR-TRN' },
+        { key: 'L2', from: 'PTR-LOPC', to: 'G-AC-FAIL' },
+        { key: 'L3', from: 'PTR-LOPC', to: 'G-MAKEUP' },
+        { key: 'L4', from: 'PTR-LOPC', to: 'HE-MAINT' },
+        { key: 'L5', from: 'PTR-LOPC', to: 'XFR-AUX' },
+        { key: 'L6', from: 'G-PTR-TRN', to: 'PTR101PO-FS' },
+        { key: 'L7', from: 'G-PTR-TRN', to: 'PTR201PO-FS' },
+        { key: 'L8', from: 'G-AC-FAIL', to: 'DG1-FS' },
+        { key: 'L9', from: 'G-AC-FAIL', to: 'DG2-FS' },
+        { key: 'L10', from: 'G-MAKEUP', to: 'MAKEUP-01' },
+        { key: 'L11', from: 'G-MAKEUP', to: 'MAKEUP-02', negated: false },
+        { key: 'L12', from: 'G-MAKEUP', to: 'MAKEUP-03' }
+      ]
+    },
+    {
+      id: 'XFR-AUX',
+      description: 'Transfer to auxiliary power FT',
+      topGateId: 'XFR-AUX',
+      nodes: [
+        { key: 'XFR-AUX', category: 'TOP_EVENT', id: 'XFR-AUX', description: 'Transfer to auxiliary power FT', state: 'NORMAL', gateType: 'OR', recordType: 'GAT' },
+        { key: 'G-AUX-AC', category: 'GATE', id: 'G-AUX-AC', description: 'Auxiliary AC supply unavailable', state: 'NORMAL', gateType: 'AND', recordType: 'GAT' },
+        { key: 'AUX-DG-FS', category: 'BASIC_EVENT', id: 'AUX-DG-FS', description: 'Auxiliary diesel fails to start', state: 'NORMAL', reliabilityModel: 3, symbol: 'CIRCLE', recordType: 'BEV' },
+        { key: 'GRID-FAIL', category: 'BASIC_EVENT', id: 'GRID-FAIL', description: 'Offsite power unavailable', state: 'NORMAL', reliabilityModel: 3, symbol: 'CIRCLE', recordType: 'BEV' }
+      ],
+      links: [
+        { key: 'XA-L1', from: 'XFR-AUX', to: 'G-AUX-AC' },
+        { key: 'XA-L2', from: 'G-AUX-AC', to: 'AUX-DG-FS' },
+        { key: 'XA-L3', from: 'G-AUX-AC', to: 'GRID-FAIL' }
+      ]
+    },
+    {
+      id: 'AC-SUPPLY',
+      description: 'AC power supply failure',
+      topGateId: 'AC-SUPPLY',
+      nodes: [
+        { key: 'AC-SUPPLY', category: 'TOP_EVENT', id: 'AC-SUPPLY', description: 'AC power supply failure', state: 'NORMAL', gateType: 'OR', recordType: 'GAT' },
+        { key: 'DG1-FS-AC', category: 'BASIC_EVENT', id: 'DG1-FS', description: 'Diesel generator 1 fails to start', state: 'NORMAL', reliabilityModel: 3, symbol: 'CIRCLE', recordType: 'BEV' },
+        { key: 'DG2-FS-AC', category: 'BASIC_EVENT', id: 'DG2-FS', description: 'Diesel generator 2 fails to start', state: 'NORMAL', reliabilityModel: 3, symbol: 'CIRCLE', recordType: 'BEV' }
+      ],
+      links: [
+        { key: 'AC-L1', from: 'AC-SUPPLY', to: 'DG1-FS-AC' },
+        { key: 'AC-L2', from: 'AC-SUPPLY', to: 'DG2-FS-AC' }
+      ]
+    },
+    {
+      id: 'MAKEUP-FT',
+      description: 'Spent fuel pool make-up unavailable',
+      topGateId: 'MAKEUP-FT',
+      nodes: [
+        { key: 'MAKEUP-FT', category: 'TOP_EVENT', id: 'MAKEUP-FT', description: 'Spent fuel pool make-up unavailable', state: 'NORMAL', gateType: 'KOFN', k: 2, recordType: 'GAT' },
+        { key: 'MAKEUP-01-FT', category: 'BASIC_EVENT', id: 'MAKEUP-01', description: 'Make-up path 1 unavailable', state: 'NORMAL', reliabilityModel: 1, symbol: 'CIRCLE', recordType: 'BEV' },
+        { key: 'MAKEUP-02-FT', category: 'BASIC_EVENT', id: 'MAKEUP-02', description: 'Make-up path 2 unavailable', state: 'NORMAL', reliabilityModel: 1, symbol: 'CIRCLE', recordType: 'BEV' },
+        { key: 'MAKEUP-03-FT', category: 'BASIC_EVENT', id: 'MAKEUP-03', description: 'Make-up path 3 unavailable', state: 'NORMAL', reliabilityModel: 1, symbol: 'CIRCLE', recordType: 'BEV' }
+      ],
+      links: [
+        { key: 'MK-L1', from: 'MAKEUP-FT', to: 'MAKEUP-01-FT' },
+        { key: 'MK-L2', from: 'MAKEUP-FT', to: 'MAKEUP-02-FT' },
+        { key: 'MK-L3', from: 'MAKEUP-FT', to: 'MAKEUP-03-FT' }
+      ]
+    }
+  ]);
+
+  readonly activeFaultTreeId = signal('PTR-LOPC');
+  readonly faultTree = computed(() =>
+    this.faultTrees().find((tree) => tree.id === this.activeFaultTreeId()) ?? this.faultTrees()[0]
+  );
+
+  selectFaultTree(id: string): void {
+    if (this.faultTrees().some((tree) => tree.id === id)) {
+      this.activeFaultTreeId.set(id);
+    }
+  }
+
 
   readonly basicEvents = signal<BasicEventRecord[]>([
     this.be('PTR101PO-FS', 'PTR train A pump fails to start', 3, 'Q_PTR_A_FS', 2.5e-3, 'PTR', 'PTR101PO'),
@@ -60,7 +120,9 @@ export class MockPsaRepository {
     this.be('DG2-FS', 'Diesel generator 2 fails to start', 3, 'Q_DG2_START', 1.0e-3, 'ACP', 'DG2'),
     this.be('MAKEUP-01', 'Make-up path 1 unavailable', 1, 'R_MAKEUP_01', 2.0e-6, 'PTR', 'MAKEUP01'),
     this.be('MAKEUP-02', 'Make-up path 2 unavailable', 1, 'R_MAKEUP_02', 2.0e-6, 'PTR', 'MAKEUP02'),
-    this.be('MAKEUP-03', 'Make-up path 3 unavailable', 1, 'R_MAKEUP_03', 2.0e-6, 'PTR', 'MAKEUP03')
+    this.be('MAKEUP-03', 'Make-up path 3 unavailable', 1, 'R_MAKEUP_03', 2.0e-6, 'PTR', 'MAKEUP03'),
+    this.be('AUX-DG-FS', 'Auxiliary diesel fails to start', 3, 'Q_AUX_DG_START', 1.5e-3, 'ACP', 'AUX-DG'),
+    this.be('GRID-FAIL', 'Offsite power unavailable', 3, 'Q_GRID_FAIL', 2.0e-3, 'ACP', 'GRID')
   ]);
 
   readonly validationIssues = signal<ValidationIssue[]>([
@@ -147,45 +209,49 @@ export class MockPsaRepository {
   }
 
   changeFaultTreeNodeReference(nodeKey: string, replacementId: string): void {
-    this.faultTree.update((model) => {
-      const current = model.nodes.find((node) => node.key === nodeKey);
-      if (!current) return model;
+    const activeId = this.activeFaultTreeId();
 
-      let replacement: Partial<FaultTreeNodeData> | undefined;
+    this.faultTrees.update((trees) =>
+      trees.map((model) => {
+        if (model.id !== activeId) return model;
 
-      if (current.category === 'BASIC_EVENT') {
-        const event = this.basicEvent(replacementId);
-        if (!event) return model;
-        replacement = {
-          id: event.id,
-          description: event.description,
-          state: event.state,
-          reliabilityModel: event.reliabilityModel,
-          symbol: event.symbol
+        const current = model.nodes.find((node) => node.key === nodeKey);
+        if (!current) return model;
+
+        let replacement: Partial<FaultTreeNodeData> | undefined;
+
+        if (current.category === 'BASIC_EVENT') {
+          const event = this.basicEvent(replacementId);
+          if (!event) return model;
+          replacement = {
+            id: event.id,
+            description: event.description,
+            state: event.state,
+            reliabilityModel: event.reliabilityModel,
+            symbol: event.symbol
+          };
+        } else if (current.category === 'HOUSE_EVENT' || current.category === 'TRANSFER') {
+          const candidate = model.nodes.find(
+            (node) => node.category === current.category && node.id === replacementId
+          );
+          if (!candidate) return model;
+          replacement = {
+            id: candidate.id,
+            description: candidate.description,
+            state: candidate.state
+          };
+        } else {
+          return model;
+        }
+
+        return {
+          ...model,
+          nodes: model.nodes.map((node) =>
+            node.key === nodeKey ? { ...node, ...replacement } : node
+          )
         };
-      } else if (current.category === 'HOUSE_EVENT' || current.category === 'TRANSFER') {
-        const candidate = model.nodes.find(
-          (node) => node.category === current.category && node.id === replacementId
-        );
-        if (!candidate) return model;
-        replacement = {
-          id: candidate.id,
-          description: candidate.description,
-          state: candidate.state
-        };
-      } else {
-        return model;
-      }
-
-      return {
-        ...model,
-        nodes: model.nodes.map((node) =>
-          node.key === nodeKey
-            ? { ...node, ...replacement }
-            : node
-        )
-      };
-    });
+      })
+    );
   }
 
   updateBasicEvent(updated: BasicEventRecord): void {

@@ -1,11 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, signal } from '@angular/core';
-import { BasicEventRecord, FaultTreeNodeData, GateRecord } from '../../core/models/psa.models';
+import { Component, computed, effect, signal } from '@angular/core';
+import { BasicEventRecord, FaultTreeModel, FaultTreeNodeData, GateRecord } from '../../core/models/psa.models';
 import { MockPsaRepository } from '../../core/data/mock-psa.repository';
 import { FaultTreeEditorComponent } from '../../gojs/fault-tree/fault-tree-editor.component';
 import { GateRecordDialogComponent } from './gate-record-dialog.component';
 import { BasicEventRecordDialogComponent } from '../data/basic-event-record-dialog.component';
 import { ChangeNodeEventDialogComponent } from './change-node-event-dialog.component';
+import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
 
 @Component({
   selector: 'app-fault-tree-page',
@@ -32,9 +33,30 @@ import { ChangeNodeEventDialogComponent } from './change-node-event-dialog.compo
       </header>
 
       <div class="workspace-tabs">
-        <button class="active">Fault Tree Workspace</button>
-        <button>{{ repository.faultTree().id }} ×</button>
-        <button>+</button>
+        <div
+          *ngFor="let workspace of workspaceService.workspaces()"
+          class="workspace-tab"
+          [class.active]="workspace.id === workspaceService.activeWorkspaceId()">
+          <button
+            type="button"
+            class="workspace-select"
+            (click)="activateWorkspace(workspace.id)">
+            {{ workspace.label }}
+            <span class="workspace-ft">{{ workspace.faultTreeId }}</span>
+          </button>
+          <button
+            type="button"
+            class="workspace-close"
+            title="Close workspace"
+            [disabled]="workspaceService.workspaces().length === 1"
+            (click)="closeWorkspace($event, workspace.id)">×</button>
+        </div>
+
+        <button
+          type="button"
+          class="workspace-add"
+          title="Open another Fault Tree workspace"
+          (click)="openWorkspace()">+</button>
       </div>
 
       <div class="editor-grid">
@@ -78,20 +100,25 @@ import { ChangeNodeEventDialogComponent } from './change-node-event-dialog.compo
         </aside>
       </div>
 
-      <section class="bottom-dock">
-        <nav>
-          <button class="active">Validation ({{ repository.validationIssues().length }})</button>
-          <button>Messages</button>
-          <button>Find Results</button>
-          <button>Analysis Log</button>
-        </nav>
-        <div class="issues">
-          <div *ngFor="let issue of repository.validationIssues()" class="issue" [attr.data-severity]="issue.severity">
-            <span class="severity">{{ issue.severity }}</span>
-            <strong>{{ issue.id }}</strong>
-            <span>{{ issue.message }}</span>
-            <span class="location">{{ issue.recordId }}</span>
+      <section class="fault-tree-browser">
+        <div class="browser-title">
+          <strong>Fault Trees in project</strong>
+          <span>Click a row to display that Fault Tree in the active workspace.</span>
+        </div>
+        <div class="ft-table">
+          <div class="ft-row ft-header">
+            <span>ID Fault Tree</span>
+            <span>Description</span>
           </div>
+          <button
+            type="button"
+            class="ft-row"
+            *ngFor="let tree of repository.faultTrees()"
+            [class.selected]="tree.id === repository.faultTree().id"
+            (click)="selectFaultTree(tree)">
+            <strong>{{ tree.id }}</strong>
+            <span>{{ tree.description }}</span>
+          </button>
         </div>
       </section>
     </section>
@@ -119,16 +146,26 @@ import { ChangeNodeEventDialogComponent } from './change-node-event-dialog.compo
   `,
   styles: [`
     :host { display: block; height: 100%; min-height: 0; }
-    .feature-page { height: 100%; display: grid; grid-template-rows: auto auto minmax(420px, 1fr) 142px; min-height: 0; }
+    .feature-page { height: 100%; display: grid; grid-template-rows: auto auto minmax(390px, 1fr) 176px; min-height: 0; }
     .feature-header { min-height: 74px; padding: 13px 18px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--nps-border); background: #fff; }
     .breadcrumb { font-size: 10px; color: var(--nps-text-muted); margin-bottom: 5px; }
     h1 { margin: 0; font-size: 17px; letter-spacing: -.01em; }
     .header-actions { display: flex; gap: 7px; }
     .header-actions button, .open-record { height: 32px; border: 1px solid var(--nps-border); border-radius: 8px; background: #fff; color: var(--nps-text); padding: 0 11px; font-size: 10px; cursor: pointer; }
     .header-actions button.primary, .open-record { background: var(--nps-blue); color: #fff; border-color: var(--nps-blue); }
-    .workspace-tabs { height: 38px; display: flex; align-items: flex-end; gap: 2px; padding: 0 10px; background: #f3f7fb; border-bottom: 1px solid var(--nps-border); }
-    .workspace-tabs button { height: 33px; border: 0; border-radius: 7px 7px 0 0; background: transparent; color: var(--nps-text-muted); font-size: 10px; padding: 0 13px; }
-    .workspace-tabs button.active { background: #fff; color: var(--nps-text); border: 1px solid var(--nps-border); border-bottom-color: #fff; font-weight: 700; }
+
+    .workspace-tabs { min-height: 42px; display: flex; align-items: flex-end; gap: 4px; padding: 0 10px; background: #f3f7fb; border-bottom: 1px solid var(--nps-border); overflow-x: auto; }
+    .workspace-tab { height: 36px; display: flex; align-items: stretch; border: 1px solid transparent; border-radius: 7px 7px 0 0; overflow: hidden; flex: 0 0 auto; }
+    .workspace-tab.active { background: #fff; border-color: var(--nps-border); border-bottom-color: #fff; }
+    .workspace-select, .workspace-close, .workspace-add { border: 0; background: transparent; cursor: pointer; font: inherit; }
+    .workspace-select { min-width: 150px; padding: 0 10px 0 12px; color: var(--nps-text-muted); font-size: 10px; text-align: left; }
+    .workspace-tab.active .workspace-select { color: var(--nps-text); font-weight: 700; }
+    .workspace-ft { margin-left: 6px; color: var(--nps-blue); font-size: 9px; font-weight: 600; }
+    .workspace-close { width: 28px; color: #7b8da1; font-size: 16px; }
+    .workspace-close:hover:not(:disabled) { background: #fee2e2; color: #b91c1c; }
+    .workspace-close:disabled { opacity: .25; cursor: default; }
+    .workspace-add { width: 34px; height: 34px; border: 1px solid var(--nps-border); border-bottom: 0; border-radius: 7px 7px 0 0; background: #fff; color: var(--nps-blue); font-size: 17px; font-weight: 700; }
+
     .editor-grid { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 290px; background: var(--nps-app-bg); }
     .diagram-panel { min-width: 0; min-height: 0; border-right: 1px solid var(--nps-border); }
     .properties-panel { background: #fff; overflow: auto; min-width: 0; }
@@ -142,18 +179,26 @@ import { ChangeNodeEventDialogComponent } from './change-node-event-dialog.compo
     .open-record { margin: 13px; }
     .interaction-help, .empty { margin: 0 13px 13px; color: var(--nps-text-muted); font-size: 10px; line-height: 1.5; }
     .empty { padding: 16px 0; }
-    .bottom-dock { min-height: 0; background: #fff; border-top: 1px solid var(--nps-border); overflow: hidden; }
-    .bottom-dock nav { height: 34px; display: flex; align-items: end; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--nps-border); }
-    .bottom-dock nav button { height: 30px; border: 0; background: transparent; color: var(--nps-text-muted); font-size: 9px; padding: 0 10px; }
-    .bottom-dock nav button.active { color: var(--nps-blue); border-bottom: 2px solid var(--nps-blue); font-weight: 700; }
-    .issues { overflow: auto; height: calc(100% - 34px); }
-    .issue { display: grid; grid-template-columns: 70px 62px 1fr 110px; gap: 8px; align-items: center; min-height: 32px; padding: 4px 12px; border-bottom: 1px solid #eef2f7; font-size: 9px; }
-    .severity { font-weight: 800; }
-    .issue[data-severity="ERROR"] .severity { color: #b91c1c; }
-    .issue[data-severity="WARNING"] .severity { color: #a16207; }
-    .issue[data-severity="INFO"] .severity { color: #1d4ed8; }
-    .location { color: var(--nps-text-muted); }
-    @media (max-width: 1150px) { .editor-grid { grid-template-columns: minmax(0, 1fr) 250px; } }
+
+    .fault-tree-browser { min-height: 0; background: #fff; border-top: 1px solid var(--nps-border); overflow: hidden; }
+    .browser-title { height: 38px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-bottom: 1px solid var(--nps-border); }
+    .browser-title strong { font-size: 10px; }
+    .browser-title span { color: var(--nps-text-muted); font-size: 9px; }
+    .ft-table { height: calc(100% - 38px); overflow: auto; }
+    .ft-row { width: 100%; min-height: 32px; display: grid; grid-template-columns: 145px minmax(0, 1fr); align-items: center; border: 0; border-bottom: 1px solid #e8edf3; background: #fff; color: var(--nps-text); text-align: left; padding: 0; font: inherit; }
+    button.ft-row { cursor: pointer; }
+    button.ft-row:hover { background: #f6f9fd; }
+    .ft-row > * { min-height: 32px; display: flex; align-items: center; padding: 0 14px; border-right: 1px solid #e8edf3; font-size: 10px; }
+    .ft-row > *:last-child { border-right: 0; }
+    .ft-header { position: sticky; top: 0; z-index: 2; background: #f7f9fc; font-weight: 800; }
+    .ft-header span { color: #334155; }
+    button.ft-row.selected { background: #edf4ff; box-shadow: inset 3px 0 0 var(--nps-blue); }
+    button.ft-row.selected strong { color: var(--nps-blue); }
+
+    @media (max-width: 1150px) {
+      .editor-grid { grid-template-columns: minmax(0, 1fr) 250px; }
+      .workspace-select { min-width: 132px; }
+    }
   `]
 })
 export class FaultTreePageComponent {
@@ -180,7 +225,44 @@ export class FaultTreePageComponent {
     this.repository.replacementCandidates(this.changeNodeTarget())
   );
 
-  constructor(readonly repository: MockPsaRepository) {}
+  constructor(
+    readonly repository: MockPsaRepository,
+    readonly workspaceService: FaultTreeWorkspaceService
+  ) {
+    effect(() => {
+      const workspace = this.workspaceService.activeWorkspace();
+      if (!workspace) return;
+      this.repository.selectFaultTree(workspace.faultTreeId);
+      this.selectedNode.set(null);
+    });
+  }
+
+  openWorkspace(): void {
+    const workspace = this.workspaceService.openWorkspace(this.repository.faultTree().id);
+    this.repository.selectFaultTree(workspace.faultTreeId);
+    this.selectedNode.set(null);
+  }
+
+  activateWorkspace(id: number): void {
+    this.workspaceService.activateWorkspace(id);
+    const workspace = this.workspaceService.activeWorkspace();
+    if (workspace) this.repository.selectFaultTree(workspace.faultTreeId);
+    this.selectedNode.set(null);
+  }
+
+  closeWorkspace(event: MouseEvent, id: number): void {
+    event.stopPropagation();
+    this.workspaceService.closeWorkspace(id);
+    const workspace = this.workspaceService.activeWorkspace();
+    if (workspace) this.repository.selectFaultTree(workspace.faultTreeId);
+    this.selectedNode.set(null);
+  }
+
+  selectFaultTree(tree: FaultTreeModel): void {
+    this.workspaceService.setActiveFaultTree(tree.id);
+    this.repository.selectFaultTree(tree.id);
+    this.selectedNode.set(null);
+  }
 
   onSelection(node: FaultTreeNodeData | null): void {
     this.selectedNode.set(node);
@@ -227,8 +309,10 @@ export class FaultTreePageComponent {
   private directInputsFor(parentId: string | undefined): FaultTreeNodeData[] {
     if (!parentId) return [];
     const model = this.repository.faultTree();
+    const parentNode = model.nodes.find((node) => node.id === parentId);
+    const parentKey = parentNode?.key ?? parentId;
     const childKeys = new Set(
-      model.links.filter((link) => link.from === parentId).map((link) => link.to)
+      model.links.filter((link) => link.from === parentKey).map((link) => link.to)
     );
     return model.nodes.filter((node) => childKeys.has(node.key));
   }
