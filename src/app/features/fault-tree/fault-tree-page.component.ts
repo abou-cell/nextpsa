@@ -48,7 +48,12 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
       <div
         class="workspace-body"
         [style.grid-template-rows]="'minmax(0, 1fr) 8px ' + browserHeight() + 'px'">
-        <main class="diagram-panel" [class.properties-docked]="propertiesDocked()">
+        <main
+          class="diagram-panel"
+          [class.properties-docked]="propertiesDocked()"
+          [style.grid-template-columns]="propertiesDocked()
+            ? 'minmax(0, 1fr) ' + propertiesWidth() + 'px'
+            : null">
           <app-fault-tree-editor
             #faultTreeEditor
             [model]="repository.faultTree()"
@@ -66,6 +71,8 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
             [style.left.px]="!propertiesDocked() ? propertiesPosition()?.x : null"
             [style.top.px]="!propertiesDocked() ? propertiesPosition()?.y : null"
             [style.right]="!propertiesDocked() && !propertiesPosition() ? '10px' : null"
+            [style.width.px]="propertiesWidth()"
+            [style.height.px]="!propertiesDocked() ? propertiesHeight() : null"
             aria-label="Properties">
             <div
               class="properties-window-header"
@@ -105,6 +112,25 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
             <ng-template #noPropertySelection>
               <div class="properties-empty">Select a Gate, Basic Event, House Event or Transfer in the FT editor.</div>
             </ng-template>
+
+            <span
+              *ngIf="!propertiesDocked()"
+              class="properties-resize-corner"
+              role="separator"
+              aria-label="Resize Properties window"
+              title="Drag to resize Properties"
+              (pointerdown)="startPropertiesResize($event)">
+            </span>
+
+            <span
+              *ngIf="propertiesDocked()"
+              class="properties-dock-resizer"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize docked Properties panel"
+              title="Drag to change Properties width"
+              (pointerdown)="startDockedPropertiesResize($event)">
+            </span>
           </aside>
         </main>
 
@@ -253,7 +279,7 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
 
     .workspace-body { min-height: 0; display: grid; background: var(--nps-app-bg); overflow: hidden; }
     .diagram-panel { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
-    .diagram-panel.properties-docked { display: grid; grid-template-columns: minmax(0, 1fr) 330px; }
+    .diagram-panel.properties-docked { display: grid; }
     .browser-resizer { position: relative; z-index: 8; cursor: row-resize; background: #eef3f8; border-top: 1px solid #d5dee8; border-bottom: 1px solid #d5dee8; touch-action: none; }
     .browser-resizer:hover, .browser-resizer.dragging { background: #dbeafe; }
     .browser-resizer span { position: absolute; left: 50%; top: 50%; width: 42px; height: 3px; border-radius: 999px; background: #94a3b8; transform: translate(-50%, -50%); }
@@ -288,7 +314,8 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
       right: 10px;
       z-index: 30;
       width: 310px;
-      max-height: calc(100% - 20px);
+      max-width: calc(100% - 8px);
+      max-height: calc(100% - 8px);
       overflow: auto;
       background: #fff;
       border: 1px solid var(--nps-border);
@@ -301,7 +328,6 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
       right: auto;
       left: auto;
       z-index: 4;
-      width: 330px;
       max-height: none;
       height: 100%;
       border: 0;
@@ -324,6 +350,55 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .properties-window-header strong { font-size: 11px; }
     .properties-window-header.draggable { cursor: move; user-select: none; touch-action: none; }
     .properties-window.docked .properties-window-header { cursor: default; }
+    .properties-resize-corner {
+      position: absolute;
+      right: -1px;
+      bottom: -1px;
+      width: 18px;
+      height: 18px;
+      cursor: nwse-resize;
+      touch-action: none;
+    }
+    .properties-resize-corner::before,
+    .properties-resize-corner::after {
+      content: '';
+      position: absolute;
+      right: 3px;
+      bottom: 3px;
+      width: 9px;
+      height: 1px;
+      background: #94a3b8;
+      transform: rotate(-45deg);
+      transform-origin: right center;
+    }
+    .properties-resize-corner::after {
+      right: 6px;
+      bottom: 3px;
+      width: 5px;
+    }
+    .properties-resize-corner:hover::before,
+    .properties-resize-corner:hover::after { background: var(--nps-blue); }
+
+    .properties-dock-resizer {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: -4px;
+      z-index: 8;
+      width: 8px;
+      cursor: col-resize;
+      touch-action: none;
+    }
+    .properties-dock-resizer::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 3px;
+      width: 1px;
+      background: #cbd5e1;
+    }
+    .properties-dock-resizer:hover::after { background: var(--nps-blue); }
     .properties-close {
       width: 28px;
       height: 26px;
@@ -356,8 +431,16 @@ export class FaultTreePageComponent {
   readonly propertiesOpen = signal(false);
   readonly propertiesDocked = signal(false);
   readonly propertiesPosition = signal<{ x: number; y: number } | null>(null);
+  readonly propertiesWidth = signal(310);
+  readonly propertiesHeight = signal(360);
 
   private isDraggingProperties = false;
+  private isResizingProperties = false;
+  private isResizingDockedProperties = false;
+  private propertiesResizeStartX = 0;
+  private propertiesResizeStartY = 0;
+  private propertiesResizeStartWidth = 310;
+  private propertiesResizeStartHeight = 360;
   private propertiesDragOffsetX = 0;
   private propertiesDragOffsetY = 0;
   readonly columnWidths = signal([180, 720, 140, 100]);
@@ -468,9 +551,39 @@ export class FaultTreePageComponent {
     if (!this.propertiesOpen()) return;
     this.isDraggingProperties = false;
     this.propertiesDocked.set(true);
+    this.propertiesHeight.set(360);
     requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
   }
 
+  startPropertiesResize(event: PointerEvent): void {
+    if (this.propertiesDocked() || event.button !== 0) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    this.isResizingProperties = true;
+    this.propertiesResizeStartX = event.clientX;
+    this.propertiesResizeStartY = event.clientY;
+    this.propertiesResizeStartWidth = this.propertiesWidth();
+    this.propertiesResizeStartHeight = this.propertiesHeight();
+
+    const target = event.currentTarget as HTMLElement | null;
+    target?.setPointerCapture?.(event.pointerId);
+  }
+
+  startDockedPropertiesResize(event: PointerEvent): void {
+    if (!this.propertiesDocked() || event.button !== 0) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    this.isResizingDockedProperties = true;
+    this.propertiesResizeStartX = event.clientX;
+    this.propertiesResizeStartWidth = this.propertiesWidth();
+
+    const target = event.currentTarget as HTMLElement | null;
+    target?.setPointerCapture?.(event.pointerId);
+  }
 
   rowHeight(treeId: string): number {
     return this.rowHeights()[treeId] ?? 23;
@@ -536,6 +649,40 @@ export class FaultTreePageComponent {
 
   @HostListener('window:pointermove', ['$event'])
   onBrowserResizeMove(event: PointerEvent): void {
+    if (this.isResizingProperties && !this.propertiesDocked()) {
+      const panel = document.querySelector('.diagram-panel') as HTMLElement | null;
+      if (!panel) return;
+
+      const panelRect = panel.getBoundingClientRect();
+      const position = this.propertiesPosition() ?? {
+        x: Math.max(0, panelRect.width - this.propertiesResizeStartWidth - 10),
+        y: 10
+      };
+
+      const maxWidth = Math.max(240, panelRect.width - position.x);
+      const maxHeight = Math.max(180, panelRect.height - position.y);
+      const width = Math.max(240, Math.min(maxWidth, this.propertiesResizeStartWidth + (event.clientX - this.propertiesResizeStartX)));
+      const height = Math.max(180, Math.min(maxHeight, this.propertiesResizeStartHeight + (event.clientY - this.propertiesResizeStartY)));
+
+      this.propertiesWidth.set(Math.round(width));
+      this.propertiesHeight.set(Math.round(height));
+      return;
+    }
+
+    if (this.isResizingDockedProperties && this.propertiesDocked()) {
+      const panel = document.querySelector('.diagram-panel') as HTMLElement | null;
+      if (!panel) return;
+
+      const panelWidth = panel.getBoundingClientRect().width;
+      const delta = this.propertiesResizeStartX - event.clientX;
+      const maxWidth = Math.max(280, Math.min(620, panelWidth * 0.6));
+      const width = Math.max(240, Math.min(maxWidth, this.propertiesResizeStartWidth + delta));
+
+      this.propertiesWidth.set(Math.round(width));
+      requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
+      return;
+    }
+
     if (this.isDraggingProperties && !this.propertiesDocked()) {
       const target = document.querySelector('.diagram-panel') as HTMLElement | null;
       const properties = document.querySelector('.properties-window') as HTMLElement | null;
@@ -592,6 +739,13 @@ export class FaultTreePageComponent {
 
   @HostListener('window:pointerup')
   stopBrowserResize(): void {
+    if (this.isResizingProperties || this.isResizingDockedProperties) {
+      this.isResizingProperties = false;
+      this.isResizingDockedProperties = false;
+      requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
+      return;
+    }
+
     if (this.isDraggingProperties) {
       this.isDraggingProperties = false;
       return;
