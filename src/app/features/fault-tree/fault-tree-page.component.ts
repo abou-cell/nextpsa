@@ -95,7 +95,7 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
 
       <section class="fault-tree-browser">
         <div class="browser-title">
-          <strong>Fault Trees in project</strong>
+          <strong>Fault Trees in project (3)</strong>
           <span>Click a row to display that Fault Tree in the active workspace.</span>
         </div>
         <div class="ft-table">
@@ -106,7 +106,7 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
           <button
             type="button"
             class="ft-row"
-            *ngFor="let tree of repository.faultTrees()"
+            *ngFor="let tree of projectFaultTrees()"
             [class.selected]="tree.id === repository.faultTree().id"
             (click)="selectFaultTree(tree)">
             <strong>{{ tree.id }}</strong>
@@ -139,7 +139,7 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
   `,
   styles: [`
     :host { display: block; height: 100%; min-height: 0; }
-    .feature-page { height: 100%; display: grid; grid-template-rows: auto auto minmax(390px, 1fr) 176px; min-height: 0; }
+    .feature-page { height: 100%; display: grid; grid-template-rows: auto auto minmax(390px, 1fr) 190px; min-height: 0; }
     .feature-header { min-height: 74px; padding: 13px 18px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--nps-border); background: #fff; }
     .breadcrumb { font-size: 10px; color: var(--nps-text-muted); margin-bottom: 5px; }
     h1 { margin: 0; font-size: 17px; letter-spacing: -.01em; }
@@ -193,6 +193,7 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
   `]
 })
 export class FaultTreePageComponent {
+  readonly projectFaultTrees = computed(() => this.repository.faultTrees().slice(0, 3));
   readonly selectedNode = signal<FaultTreeNodeData | null>(null);
   readonly openGate = signal<GateRecord | null>(null);
   readonly openBasicEvent = signal<BasicEventRecord | null>(null);
