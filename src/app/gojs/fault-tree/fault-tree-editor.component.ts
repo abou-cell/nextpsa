@@ -1241,6 +1241,19 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         )
       );
 
+    const negateMarker = () =>
+      $(go.Shape, 'Circle', {
+          name: 'NEGATE_MARKER',
+          desiredSize: new go.Size(8, 8),
+          fill: '#ffffff',
+          stroke: '#111111',
+          strokeWidth: 1.1,
+          alignment: go.Spot.Top,
+          visible: false
+        },
+        new go.Binding('visible', 'negated', Boolean)
+      );
+
     /**
      * RiskSpectrum-style Gate artwork.
      * The gate body is intentionally separate from the GoJS connection ports.
@@ -1449,12 +1462,38 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         })
       );
 
+    const negateMenuButton = () =>
+      $('ContextMenuButton',
+        {
+          height: 25,
+          stretch: go.Stretch.Horizontal,
+          click: (_event: go.InputEvent, obj: go.GraphObject) => {
+            const node = contextNode(obj);
+            if (!node) return;
+            this.handleContextAction('NEGATE', node);
+          }
+        },
+        $(go.TextBlock, {
+            width: 176,
+            margin: new go.Margin(3, 8),
+            font: '10px Inter, "Segoe UI", sans-serif',
+            stroke: '#111827',
+            textAlign: 'left'
+          },
+          new go.Binding(
+            'text',
+            'negated',
+            (negated: boolean | undefined) => negated ? '✓ Negate' : 'Negate'
+          )
+        )
+      );
+
     const gateContextMenu = () =>
       $('ContextMenu',
         menuButton('Edit Event...', 'EDIT'),
         menuButton('Change node Event...', 'CHANGE_NODE', false),
         menuButton('Add input node   ›', 'ADD_INPUT'),
-        menuButton('Negate node', 'NEGATE'),
+        negateMenuButton(),
         menuButton('State   ›', 'STATE'),
         menuSeparator(),
         menuButton('Edit Fault Tree...', 'EDIT_FAULT_TREE'),
@@ -1489,7 +1528,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         menuButton('Edit Event...', 'EDIT'),
         menuButton('Change node Event...', 'CHANGE_NODE'),
         menuButton('Add input node   ›', 'ADD_INPUT'),
-        menuButton('Negate node', 'NEGATE'),
+        negateMenuButton(),
         menuButton('State   ›', 'STATE'),
         menuSeparator(),
         menuButton('Edit Fault Tree...', 'EDIT_FAULT_TREE'),
@@ -1538,7 +1577,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           // artwork itself, so every link starts directly on the symbol with no gap.
           gateArtwork(gateType, true)
         ),
-        this.makeTopPort()
+        this.makeTopPort(),
+        negateMarker()
       );
 
     const makeTerminalNodeTemplate = (
@@ -1557,7 +1597,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
             artwork
           )
         ),
-        this.makeTopPort()
+        this.makeTopPort(),
+        negateMarker()
       );
 
     const diagram = $(go.Diagram, this.diagramDiv.nativeElement, {
