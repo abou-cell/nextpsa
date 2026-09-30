@@ -117,12 +117,12 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
               <tbody>
                 <tr
                   *ngFor="let tree of projectFaultTrees()"
-                  [class.selected]="tree.id === selectedTableTreeId()"
+                  [class.selected]="isTableRowSelected(tree.id)"
                   [class.tagged]="!!tree.tagColor"
                   [style.background-color]="tree.tagColor || null"
                   [style.height.px]="rowHeight(tree.id)"
                   tabindex="0"
-                  (click)="selectFaultTree(tree)"
+                  (click)="selectFaultTree(tree, $event)"
                   (keydown.enter)="selectFaultTree(tree)"
                   (keydown.space)="selectFaultTree(tree)">
                   <td class="ft-id">
@@ -208,11 +208,11 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .browser-resizer:hover, .browser-resizer.dragging { background: #dbeafe; }
     .browser-resizer span { position: absolute; left: 50%; top: 50%; width: 42px; height: 3px; border-radius: 999px; background: #94a3b8; transform: translate(-50%, -50%); }
     .browser-resizer:hover span, .browser-resizer.dragging span { background: var(--nps-blue); }
-    .fault-tree-browser-panel { min-width: 0; min-height: 0; overflow: hidden; background: #fff; display: grid; grid-template-rows: minmax(0, 1fr) 38px; }
+    .fault-tree-browser-panel { min-width: 0; min-height: 0; overflow: hidden; background: #fff; display: grid; grid-template-rows: minmax(0, 1fr) 24px; }
     .ft-table-wrap { min-height: 0; overflow: auto; background: #fff; }
-    .browser-footer { display: flex; align-items: center; gap: 12px; padding: 0 8px 0 12px; border-top: 1px solid var(--nps-border); background: #f8fafc; }
-    .browser-footer strong { font-size: 10px; color: var(--nps-text); }
-    .tagged-count { margin-left: 10px; color: var(--nps-text-muted); font-weight: 600; }
+    .browser-footer { display: flex; align-items: center; gap: 8px; min-height: 24px; padding: 0 8px; border-top: 1px solid var(--nps-border); background: #f8fafc; overflow: hidden; }
+    .browser-footer strong { font-size: 9px; line-height: 1; color: var(--nps-text); white-space: nowrap; }
+    .tagged-count { margin-left: 8px; color: var(--nps-text-muted); font-weight: 600; }
     .ft-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: #fff; color: #111827; }
     .ft-table th, .ft-table td { position: relative; min-height: 24px; padding: 0 14px; border-bottom: 1px solid #dfe6ee; border-right: 1px solid #dfe6ee; text-align: left; vertical-align: middle; font-size: 11px; color: #111827; background: transparent; opacity: 1; visibility: visible; }
     .ft-table th { height: 38px; }
@@ -226,7 +226,7 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .row-resizer:hover::after { background: var(--nps-blue); }
     .ft-table tbody tr { cursor: pointer; background: #fff; }
     .ft-table tbody tr:hover { background: #f6f9fd; }
-    .ft-table tbody tr.selected { box-shadow: inset 3px 0 0 var(--nps-blue); }
+    .ft-table tbody tr.selected { outline: 1px solid #93c5fd; outline-offset: -1px; box-shadow: inset 3px 0 0 var(--nps-blue); background-image: linear-gradient(rgba(219,234,254,.42), rgba(219,234,254,.42)); }
     .ft-table tbody tr.selected .ft-id { color: var(--nps-blue); font-weight: 800; }
     .ft-table tbody tr.tagged td { font-weight: 600; }
     .ft-id { font-weight: 700; }
@@ -256,6 +256,7 @@ export class FaultTreePageComponent {
   private columnResizeStartWidth = 0;
 
   private activeRowResizeId: string | null = null;
+  private activeRowResizeIds: string[] = [];
   private rowResizeStartY = 0;
   private rowResizeStartHeight = 38;
 
@@ -264,6 +265,7 @@ export class FaultTreePageComponent {
     this.projectFaultTrees().filter((tree) => !!tree.tagColor).length
   );
   readonly selectedTableTreeId = signal<string | null>(null);
+  readonly selectedTableTreeIds = signal<string[]>([]);
   readonly tableTagColor = signal('#fff200');
   readonly selectedNode = signal<FaultTreeNodeData | null>(null);
   readonly openGate = signal<GateRecord | null>(null);
@@ -300,6 +302,10 @@ export class FaultTreePageComponent {
     });
   }
 
+  isTableRowSelected(treeId: string): boolean {
+    return this.selectedTableTreeIds().includes(treeId);
+  }
+
   rowHeight(treeId: string): number {
     return this.rowHeights()[treeId] ?? 38;
   }
@@ -325,6 +331,12 @@ export class FaultTreePageComponent {
   startRowResize(event: PointerEvent, treeId: string): void {
     event.preventDefault();
     event.stopPropagation();
+
+    const selectedIds = this.selectedTableTreeIds();
+    this.activeRowResizeIds = selectedIds.includes(treeId) && selectedIds.length > 1
+      ? [...selectedIds]
+      : [treeId];
+
     this.activeRowResizeId = treeId;
     this.rowResizeStartY = event.clientY;
     this.rowResizeStartHeight = this.rowHeight(treeId);
@@ -334,9 +346,14 @@ export class FaultTreePageComponent {
   }
 
   resetRowHeight(treeId: string): void {
+    const selectedIds = this.selectedTableTreeIds();
+    const targetIds = selectedIds.includes(treeId) && selectedIds.length > 1
+      ? selectedIds
+      : [treeId];
+
     this.rowHeights.update((heights) => {
       const next = { ...heights };
-      delete next[treeId];
+      targetIds.forEach((id) => delete next[id]);
       return next;
     });
   }
@@ -369,10 +386,16 @@ export class FaultTreePageComponent {
     }
 
     if (this.activeRowResizeId) {
-      const treeId = this.activeRowResizeId;
       const delta = event.clientY - this.rowResizeStartY;
       const nextHeight = Math.max(26, Math.min(120, this.rowResizeStartHeight + delta));
-      this.rowHeights.update((heights) => ({ ...heights, [treeId]: Math.round(nextHeight) }));
+
+      this.rowHeights.update((heights) => {
+        const next = { ...heights };
+        this.activeRowResizeIds.forEach((id) => {
+          next[id] = Math.round(nextHeight);
+        });
+        return next;
+      });
       return;
     }
 
@@ -391,6 +414,7 @@ export class FaultTreePageComponent {
     const resizedTable = this.activeColumnResize !== null || this.activeRowResizeId !== null;
     this.activeColumnResize = null;
     this.activeRowResizeId = null;
+    this.activeRowResizeIds = [];
 
     if (this.isResizingBrowser) {
       this.isResizingBrowser = false;
@@ -426,6 +450,7 @@ export class FaultTreePageComponent {
     if (workspace) this.repository.selectFaultTree(workspace.faultTreeId);
     this.selectedNode.set(null);
     this.selectedTableTreeId.set(null);
+    this.selectedTableTreeIds.set([]);
   }
 
   closeWorkspace(event: MouseEvent, id: number): void {
@@ -435,9 +460,27 @@ export class FaultTreePageComponent {
     if (workspace) this.repository.selectFaultTree(workspace.faultTreeId);
     this.selectedNode.set(null);
     this.selectedTableTreeId.set(null);
+    this.selectedTableTreeIds.set([]);
   }
 
-  selectFaultTree(tree: FaultTreeModel): void {
+  selectFaultTree(tree: FaultTreeModel, event?: MouseEvent): void {
+    const multiSelect = !!event?.ctrlKey;
+
+    if (multiSelect) {
+      event?.preventDefault();
+      event?.stopPropagation();
+
+      this.selectedTableTreeIds.update((ids) =>
+        ids.includes(tree.id)
+          ? ids.filter((id) => id !== tree.id)
+          : [...ids, tree.id]
+      );
+      this.selectedTableTreeId.set(tree.id);
+      this.selectedNode.set(null);
+      return;
+    }
+
+    this.selectedTableTreeIds.set([tree.id]);
     this.selectedTableTreeId.set(tree.id);
     this.workspaceService.setActiveFaultTree(tree.id);
     this.repository.selectFaultTree(tree.id);
