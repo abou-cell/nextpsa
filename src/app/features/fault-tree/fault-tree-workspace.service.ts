@@ -11,7 +11,7 @@ export class FaultTreeWorkspaceService {
   private nextWorkspaceId = 1;
 
   readonly workspaces = signal<FaultTreeWorkspace[]>([
-    { id: 1, label: 'Fault Tree Workspace 1', faultTreeId: 'PTR-LOPC' }
+    { id: 1, label: 'Fault Tree Workspace', faultTreeId: 'PTR-LOPC' }
   ]);
 
   readonly activeWorkspaceId = signal(1);
@@ -25,7 +25,7 @@ export class FaultTreeWorkspaceService {
     const id = ++this.nextWorkspaceId;
     const workspace: FaultTreeWorkspace = {
       id,
-      label: `Fault Tree Workspace ${id}`,
+      label: 'Fault Tree Workspace',
       faultTreeId: defaultFaultTreeId
     };
 
