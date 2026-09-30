@@ -75,9 +75,10 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
             [style.height.px]="!propertiesDocked() ? propertiesHeight() : null"
             aria-label="Properties">
             <div
-              class="properties-window-header"
-              [class.draggable]="!propertiesDocked()"
-              title="Drag to move. Double-click to dock on the right."
+              class="properties-window-header draggable"
+              [title]="propertiesDocked()
+                ? 'Drag toward the editor to undock. Double-click keeps it docked.'
+                : 'Drag to move. Double-click to dock on the right.'"
               (pointerdown)="startPropertiesDrag($event)"
               (dblclick)="dockPropertiesWindow()">
               <strong>Properties</strong>
@@ -349,7 +350,7 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     }
     .properties-window-header strong { font-size: 11px; }
     .properties-window-header.draggable { cursor: move; user-select: none; touch-action: none; }
-    .properties-window.docked .properties-window-header { cursor: default; }
+    .properties-window.docked .properties-window-header { cursor: grab; }
     .properties-resize-corner {
       position: absolute;
       right: -1px;
@@ -435,6 +436,9 @@ export class FaultTreePageComponent {
   readonly propertiesHeight = signal(360);
 
   private isDraggingProperties = false;
+  private isPendingDockedPropertiesDrag = false;
+  private dockedPropertiesPointerStartX = 0;
+  private dockedPropertiesPointerStartY = 0;
   private isResizingProperties = false;
   private isResizingDockedProperties = false;
   private propertiesResizeStartX = 0;
@@ -520,11 +524,12 @@ export class FaultTreePageComponent {
     this.propertiesDocked.set(false);
     this.propertiesPosition.set(null);
     this.isDraggingProperties = false;
+    this.isPendingDockedPropertiesDrag = false;
     requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
   }
 
   startPropertiesDrag(event: PointerEvent): void {
-    if (this.propertiesDocked() || event.button !== 0) return;
+    if (event.button !== 0) return;
 
     const header = event.currentTarget as HTMLElement | null;
     const windowElement = header?.closest('.properties-window') as HTMLElement | null;
@@ -536,13 +541,20 @@ export class FaultTreePageComponent {
     const windowRect = windowElement.getBoundingClientRect();
     const panelRect = panel.getBoundingClientRect();
 
-    this.propertiesPosition.set({
-      x: windowRect.left - panelRect.left,
-      y: windowRect.top - panelRect.top
-    });
     this.propertiesDragOffsetX = event.clientX - windowRect.left;
     this.propertiesDragOffsetY = event.clientY - windowRect.top;
-    this.isDraggingProperties = true;
+
+    if (this.propertiesDocked()) {
+      this.isPendingDockedPropertiesDrag = true;
+      this.dockedPropertiesPointerStartX = event.clientX;
+      this.dockedPropertiesPointerStartY = event.clientY;
+    } else {
+      this.propertiesPosition.set({
+        x: windowRect.left - panelRect.left,
+        y: windowRect.top - panelRect.top
+      });
+      this.isDraggingProperties = true;
+    }
 
     header?.setPointerCapture?.(event.pointerId);
   }
@@ -550,6 +562,7 @@ export class FaultTreePageComponent {
   dockPropertiesWindow(): void {
     if (!this.propertiesOpen()) return;
     this.isDraggingProperties = false;
+    this.isPendingDockedPropertiesDrag = false;
     this.propertiesDocked.set(true);
     this.propertiesHeight.set(360);
     requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
@@ -649,6 +662,34 @@ export class FaultTreePageComponent {
 
   @HostListener('window:pointermove', ['$event'])
   onBrowserResizeMove(event: PointerEvent): void {
+    if (this.isPendingDockedPropertiesDrag && this.propertiesDocked()) {
+      const dx = event.clientX - this.dockedPropertiesPointerStartX;
+      const dy = event.clientY - this.dockedPropertiesPointerStartY;
+
+      if (Math.hypot(dx, dy) >= 6) {
+        const panel = document.querySelector('.diagram-panel') as HTMLElement | null;
+        const properties = document.querySelector('.properties-window') as HTMLElement | null;
+        if (!panel || !properties) return;
+
+        const panelRect = panel.getBoundingClientRect();
+        const propertiesRect = properties.getBoundingClientRect();
+
+        this.propertiesPosition.set({
+          x: Math.max(0, propertiesRect.left - panelRect.left),
+          y: Math.max(0, propertiesRect.top - panelRect.top)
+        });
+        this.propertiesHeight.set(
+          Math.max(180, Math.min(360, panelRect.height - 20))
+        );
+        this.propertiesDocked.set(false);
+        this.isPendingDockedPropertiesDrag = false;
+        this.isDraggingProperties = true;
+        requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
+      } else {
+        return;
+      }
+    }
+
     if (this.isResizingProperties && !this.propertiesDocked()) {
       const panel = document.querySelector('.diagram-panel') as HTMLElement | null;
       if (!panel) return;
@@ -739,6 +780,8 @@ export class FaultTreePageComponent {
 
   @HostListener('window:pointerup')
   stopBrowserResize(): void {
+    this.isPendingDockedPropertiesDrag = false;
+
     if (this.isResizingProperties || this.isResizingDockedProperties) {
       this.isResizingProperties = false;
       this.isResizingDockedProperties = false;
