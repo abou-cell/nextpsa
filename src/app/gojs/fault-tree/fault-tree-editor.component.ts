@@ -584,12 +584,15 @@ class RiskSpectrumBranchLink extends go.Link {
     const rawEnd = toPort.getDocumentPoint(go.Spot.Center);
 
     // RiskSpectrum-style NOT marker:
-    // when the child input is negated, the visible 8 px bubble sits immediately
-    // above the record border. Terminate the incoming branch at the TOP of that
-    // bubble so the line never runs through its white interior.
+    // terminate the incoming branch at the ACTUAL top of the visible bubble.
+    // Using the marker geometry itself avoids any dependency on node/port
+    // bounds and guarantees that the line can never pass through the circle.
     const childData = this.toNode?.data as FaultTreeNodeData | undefined;
-    const end = childData?.negated
-      ? new go.Point(rawEnd.x, rawEnd.y - 8)
+    const negateMarker = this.toNode?.findObject('NEGATE_MARKER');
+    const markerTop = negateMarker?.getDocumentPoint(go.Spot.Top);
+
+    const end = childData?.negated && negateMarker?.visible && markerTop
+      ? new go.Point(markerTop.x, markerTop.y)
       : rawEnd;
 
     if (
@@ -1096,6 +1099,11 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     diagram.commitTransaction(next ? 'Negate fault-tree node' : 'Unnegate fault-tree node');
 
+    // Negation changes the link's physical end point (normal input port vs.
+    // top of the NOT bubble). Force GoJS to recompute the route immediately.
+    incoming?.invalidateRoute();
+    diagram.requestUpdate();
+
     const sourceNode = this.model.nodes.find((item) => item.key === nodeData.key);
     if (sourceNode) sourceNode.negated = next;
 
@@ -1265,10 +1273,11 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           fill: '#ffffff',
           stroke: '#111111',
           strokeWidth: 1.1,
-          alignment: go.Spot.Top,
-          // Keep the marker outside the record box: its bottom edge touches
-          // the top border instead of placing half of the circle inside it.
-          alignmentFocus: go.Spot.Bottom,
+          // Explicitly place the circle centre 4 px above the record top.
+          // With an 8 px diameter, its lower edge is exactly tangent to the
+          // rectangle border and no part of the white circle sits inside it.
+          alignment: new go.Spot(0.5, 0, 0, -4),
+          alignmentFocus: go.Spot.Center,
           visible: false
         },
         new go.Binding('visible', 'negated', Boolean)
