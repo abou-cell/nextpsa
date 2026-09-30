@@ -91,6 +91,8 @@ export interface FaultTreeNodeData {
   manualY?: number;
   /** Stable horizontal order among children of the same Gate. */
   siblingOrder?: number;
+  /** Optional RiskSpectrum-style visual tag color applied to the record box. */
+  tagColor?: string | null;
   recordType: 'GAT' | 'BEV' | 'HEV' | 'FTR';
 }
 

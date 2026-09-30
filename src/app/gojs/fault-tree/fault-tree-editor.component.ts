@@ -52,9 +52,11 @@ class FaultTreeCommandHandler extends go.CommandHandler {
   cutAction?: () => boolean;
   copyAction?: () => boolean;
   pasteAction?: () => boolean;
+  tagAction?: () => boolean;
   canCutAction?: () => boolean;
   canCopyAction?: () => boolean;
   canPasteAction?: () => boolean;
+  canTagAction?: () => boolean;
 
   override canCutSelection(): boolean {
     if (this.canCutAction?.()) return true;
@@ -92,7 +94,6 @@ class FaultTreeCommandHandler extends go.CommandHandler {
     const modifier = Boolean(input?.control || input?.meta);
 
     // Explicitly route Ctrl/Cmd+X/C/V through the NextPSA FT clipboard.
-    // This avoids GoJS native clipboard behavior splitting a selected subtree.
     if (modifier && key === 'x' && this.canCutSelection()) {
       this.cutSelection();
       return;
@@ -105,6 +106,15 @@ class FaultTreeCommandHandler extends go.CommandHandler {
 
     if (modifier && key === 'v' && this.canPasteSelection()) {
       this.pasteSelection();
+      return;
+    }
+
+    // RiskSpectrum-style Tag shortcut. Ctrl/Cmd+T applies the currently
+    // selected tag colour to one selected component or a selected branch.
+    if (modifier && key === 't' && this.canTagAction?.()) {
+      const nativeEvent = input?.event as KeyboardEvent | null | undefined;
+      nativeEvent?.preventDefault();
+      this.tagAction?.();
       return;
     }
 
@@ -624,6 +634,34 @@ class RiskSpectrumBranchLink extends go.Link {
             <span class="zoom-label">{{ zoomPercent }}%</span>
             <button type="button" title="Zoom in" (click)="zoom(0.1)">+</button>
             <button type="button" (click)="fit()">Fit</button>
+            <div class="tag-color-control" [class.open]="tagPaletteOpen">
+              <button
+                type="button"
+                class="tag-color-button"
+                title="Tag colour"
+                aria-label="Choose tag colour"
+                (click)="toggleTagPalette()">
+                <span class="tag-color-preview" [style.background]="activeTagColor"></span>
+                <span class="tag-color-chevron">▾</span>
+              </button>
+              <div class="tag-color-menu" role="menu" aria-label="Tag colour palette">
+                <button type="button" title="Yellow" (click)="selectTagColor('#fff200')">
+                  <span style="background:#fff200"></span>
+                </button>
+                <button type="button" title="Salmon" (click)="selectTagColor('#ffb4a8')">
+                  <span style="background:#ffb4a8"></span>
+                </button>
+                <button type="button" title="Sand" (click)="selectTagColor('#ffd6a3')">
+                  <span style="background:#ffd6a3"></span>
+                </button>
+                <button type="button" title="Cyan" (click)="selectTagColor('#73e3ea')">
+                  <span style="background:#73e3ea"></span>
+                </button>
+                <button type="button" title="Blue cyan" (click)="selectTagColor('#48c4d4')">
+                  <span style="background:#48c4d4"></span>
+                </button>
+              </div>
+            </div>
             <button
               type="button"
               class="layout-toggle"
@@ -716,6 +754,67 @@ class RiskSpectrumBranchLink extends go.Link {
       font-weight: 600;
     }
     .toolbar-group button:hover { background: #eef5ff; border-color: #b6cdf7; }
+    .tag-color-control {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    .toolbar-group button.tag-color-button {
+      width: 54px;
+      min-width: 54px;
+      padding: 3px 5px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 5px;
+    }
+    .tag-color-preview {
+      width: 30px;
+      height: 14px;
+      border: 1px solid #111827;
+      box-sizing: border-box;
+      display: inline-block;
+    }
+    .tag-color-chevron {
+      font-size: 10px;
+      line-height: 1;
+      color: #475569;
+    }
+    .tag-color-menu {
+      position: absolute;
+      top: 31px;
+      left: 0;
+      z-index: 50;
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 54px;
+      padding: 3px;
+      border: 1px solid #94a3b8;
+      background: #ffffff;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+    }
+    .tag-color-control.open .tag-color-menu { display: flex; }
+    .toolbar-group .tag-color-menu button {
+      width: 48px;
+      min-width: 48px;
+      height: 20px;
+      padding: 1px 3px;
+      border: 1px solid transparent;
+      border-radius: 0;
+      background: #ffffff;
+    }
+    .toolbar-group .tag-color-menu button:hover {
+      border-color: #64748b;
+      background: #f8fafc;
+    }
+    .tag-color-menu button span {
+      display: block;
+      width: 38px;
+      height: 14px;
+      border: 1px solid #334155;
+      box-sizing: border-box;
+    }
     .toolbar-group button.layout-toggle {
       width: 34px;
       min-width: 34px;
@@ -828,6 +927,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   branchAttachParentId: string | null = null;
 
   layoutMode: FaultTreeLayoutMode = 'LEFT';
+  activeTagColor = '#fff200';
+  tagPaletteOpen = false;
   zoomPercent = 100;
 
   constructor(private readonly zone: NgZone) {}
@@ -877,6 +978,42 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       this.diagram.centerRect(this.diagram.documentBounds);
       this.updateZoomLabel();
     }
+  }
+
+  toggleTagPalette(): void {
+    this.tagPaletteOpen = !this.tagPaletteOpen;
+  }
+
+  selectTagColor(color: string): void {
+    this.activeTagColor = color;
+    this.tagPaletteOpen = false;
+  }
+
+  private tagSelectedNodes(
+    diagram: go.Diagram,
+    color: string | null
+  ): boolean {
+    const nodes: go.Node[] = [];
+
+    diagram.selection.each((part) => {
+      if (part instanceof go.Node) nodes.push(part);
+    });
+
+    if (!nodes.length) return false;
+
+    const graphModel = diagram.model as go.GraphLinksModel;
+    diagram.startTransaction(color ? 'Tag Fault Tree selection' : 'Untag Fault Tree selection');
+
+    nodes.forEach((node) => {
+      const data = node.data as FaultTreeNodeData;
+      graphModel.setDataProperty(data, 'tagColor', color);
+
+      const source = this.model.nodes.find((item) => item.key === data.key);
+      if (source) source.tagColor = color;
+    });
+
+    diagram.commitTransaction(color ? 'Tag Fault Tree selection' : 'Untag Fault Tree selection');
+    return true;
   }
 
   fit(): void {
@@ -946,11 +1083,15 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           height: 69
         },
         $(go.Shape, 'RoundedRectangle', {
-          fill,
-          stroke,
-          strokeWidth: 1,
-          parameter1: 2
-        }),
+            fill,
+            stroke,
+            strokeWidth: 1,
+            parameter1: 2
+          },
+          new go.Binding('fill', 'tagColor', (tagColor: string | null | undefined) =>
+            tagColor || fill
+          )
+        ),
         $(go.Panel, 'Table',
           {
             width: 132,
@@ -1197,6 +1338,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         menuButton('Select branch', 'SELECT_BRANCH'),
         menuButton('Select inputs', 'SELECT_INPUTS'),
         menuSeparator(),
+        menuButton('Tag     Ctrl+T', 'TAG'),
+        menuButton('Untag', 'UNTAG'),
+        menuSeparator(),
         menuButton('Cut     Ctrl+X', 'CUT'),
         menuButton('Copy    Ctrl+C', 'COPY'),
         menuButton('Paste   Ctrl+V', 'PASTE'),
@@ -1227,6 +1371,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         menuSeparator(),
         menuButton('Select branch', 'SELECT_BRANCH', false),
         menuButton('Select inputs', 'SELECT_INPUTS', false),
+        menuSeparator(),
+        menuButton('Tag     Ctrl+T', 'TAG'),
+        menuButton('Untag', 'UNTAG'),
         menuSeparator(),
         menuButton('Cut     Ctrl+X', 'CUT'),
         menuButton('Copy    Ctrl+C', 'COPY'),
@@ -1327,6 +1474,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     commandHandler.cutAction = () => this.cutFaultTreeSelection(diagram);
     commandHandler.copyAction = () => this.copyFaultTreeSelection(diagram);
     commandHandler.pasteAction = () => this.pasteFaultTreeSelection(diagram);
+    commandHandler.tagAction = () => this.tagSelectedNodes(diagram, this.activeTagColor);
 
     const hasCopyableSelection = (): boolean => {
       let hasCopyableNode = false;
@@ -1345,6 +1493,13 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     commandHandler.canCopyAction = hasCopyableSelection;
     commandHandler.canPasteAction = () =>
       Boolean(this.faultTreeClipboard?.nodes.length);
+    commandHandler.canTagAction = () => {
+      let hasSelectedNode = false;
+      diagram.selection.each((part) => {
+        if (part instanceof go.Node) hasSelectedNode = true;
+      });
+      return hasSelectedNode;
+    };
     diagram.commandHandler = commandHandler;
 
 
@@ -2807,7 +2962,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     if (!diagram) return;
 
     const preserveExistingSelection =
-      (action === 'CUT' || action === 'COPY') &&
+      (action === 'CUT' ||
+        action === 'COPY' ||
+        action === 'TAG' ||
+        action === 'UNTAG') &&
       node.isSelected;
 
     if (!preserveExistingSelection) {
@@ -2860,6 +3018,14 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         node.findNodesOutOf().each((child) => {
           child.isSelected = true;
         });
+        return;
+
+      case 'TAG':
+        this.tagSelectedNodes(diagram, this.activeTagColor);
+        return;
+
+      case 'UNTAG':
+        this.tagSelectedNodes(diagram, null);
         return;
 
       case 'CUT':
