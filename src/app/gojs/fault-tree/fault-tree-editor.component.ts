@@ -637,6 +637,16 @@ class RiskSpectrumBranchLink extends go.Link {
             <span class="zoom-label">{{ zoomPercent }}%</span>
             <button type="button" title="Zoom in" (click)="zoom(0.1)">+</button>
             <button type="button" (click)="fit()">Fit</button>
+            <button
+              type="button"
+              class="negate-button"
+              [class.active]="isSelectedNodeNegated()"
+              [disabled]="!canNegateSelection()"
+              title="Toggle Negate / NOT on selected component"
+              aria-label="Toggle Negate on selected component"
+              (click)="toggleNegateSelection()">
+              {{ isSelectedNodeNegated() ? '✓ Negate' : '○ Negate' }}
+            </button>
             <div class="tag-color-control" [class.open]="tagPaletteOpen">
               <button
                 type="button"
@@ -757,6 +767,24 @@ class RiskSpectrumBranchLink extends go.Link {
       font-weight: 600;
     }
     .toolbar-group button:hover { background: #eef5ff; border-color: #b6cdf7; }
+    .toolbar-group button.negate-button {
+      min-width: 72px;
+      padding: 0 8px;
+      font-size: 10px;
+    }
+    .toolbar-group button.negate-button.active {
+      color: #0f5bd8;
+      border-color: #6ea2f8;
+      background: #eaf2ff;
+      box-shadow: inset 0 0 0 1px #b7d0fb;
+    }
+    .toolbar-group button.negate-button:disabled {
+      opacity: 0.42;
+      cursor: default;
+      background: #fff;
+      border-color: var(--nps-border);
+      color: #64748b;
+    }
     .tag-color-control {
       position: relative;
       display: inline-flex;
