@@ -1161,6 +1161,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     this.updateZoomLabel();
   }
 
+  refreshViewport(): void {
+    this.diagram?.requestUpdate();
+  }
+
   zoom(delta: number): void {
     if (!this.diagram) return;
     this.diagram.scale = Math.min(2.5, Math.max(0.35, this.diagram.scale + delta));
