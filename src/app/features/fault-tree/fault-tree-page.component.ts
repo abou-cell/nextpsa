@@ -42,7 +42,6 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
             class="workspace-select"
             (click)="activateWorkspace(workspace.id)">
             {{ workspace.label }}
-            <span class="workspace-ft">{{ workspace.faultTreeId }}</span>
           </button>
           <button
             type="button"
@@ -51,12 +50,6 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
             [disabled]="workspaceService.workspaces().length === 1"
             (click)="closeWorkspace($event, workspace.id)">×</button>
         </div>
-
-        <button
-          type="button"
-          class="workspace-add"
-          title="Open another Fault Tree workspace"
-          (click)="openWorkspace()">+</button>
       </div>
 
       <div class="editor-grid">
@@ -157,14 +150,12 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .workspace-tabs { min-height: 42px; display: flex; align-items: flex-end; gap: 4px; padding: 0 10px; background: #f3f7fb; border-bottom: 1px solid var(--nps-border); overflow-x: auto; }
     .workspace-tab { height: 36px; display: flex; align-items: stretch; border: 1px solid transparent; border-radius: 7px 7px 0 0; overflow: hidden; flex: 0 0 auto; }
     .workspace-tab.active { background: #fff; border-color: var(--nps-border); border-bottom-color: #fff; }
-    .workspace-select, .workspace-close, .workspace-add { border: 0; background: transparent; cursor: pointer; font: inherit; }
+    .workspace-select, .workspace-close { border: 0; background: transparent; cursor: pointer; font: inherit; }
     .workspace-select { min-width: 150px; padding: 0 10px 0 12px; color: var(--nps-text-muted); font-size: 10px; text-align: left; }
     .workspace-tab.active .workspace-select { color: var(--nps-text); font-weight: 700; }
-    .workspace-ft { margin-left: 6px; color: var(--nps-blue); font-size: 9px; font-weight: 600; }
     .workspace-close { width: 28px; color: #7b8da1; font-size: 16px; }
     .workspace-close:hover:not(:disabled) { background: #fee2e2; color: #b91c1c; }
     .workspace-close:disabled { opacity: .25; cursor: default; }
-    .workspace-add { width: 34px; height: 34px; border: 1px solid var(--nps-border); border-bottom: 0; border-radius: 7px 7px 0 0; background: #fff; color: var(--nps-blue); font-size: 17px; font-weight: 700; }
 
     .editor-grid { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 290px; background: var(--nps-app-bg); }
     .diagram-panel { min-width: 0; min-height: 0; border-right: 1px solid var(--nps-border); }
@@ -235,12 +226,6 @@ export class FaultTreePageComponent {
       this.repository.selectFaultTree(workspace.faultTreeId);
       this.selectedNode.set(null);
     });
-  }
-
-  openWorkspace(): void {
-    const workspace = this.workspaceService.openWorkspace(this.repository.faultTree().id);
-    this.repository.selectFaultTree(workspace.faultTreeId);
-    this.selectedNode.set(null);
   }
 
   activateWorkspace(id: number): void {
