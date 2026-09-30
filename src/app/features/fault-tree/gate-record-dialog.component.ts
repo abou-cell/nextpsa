@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, HostListener, Input, Output } from '@angular/core';
 import {
   BasicEventRecord,
   FaultTreeNodeData,
@@ -13,14 +13,24 @@ type GateTab = 'main' | 'inputs' | 'basics' | 'attributes' | 'exchange' | 'memo'
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="dialog-backdrop" *ngIf="gate" (mousedown)="close.emit()">
-      <section class="record-dialog" (mousedown)="$event.stopPropagation()" role="dialog" aria-modal="true">
-        <header class="dialog-header">
+    <div class="dialog-backdrop" *ngIf="gate">
+      <section
+        class="record-dialog"
+        [class.moved]="windowPosition !== null"
+        [style.left.px]="windowPosition?.x"
+        [style.top.px]="windowPosition?.y"
+        role="dialog"
+        aria-modal="false">
+        <header class="dialog-header" (pointerdown)="startDrag($event)">
           <div>
             <div class="eyebrow">{{ gate?.isTopGate ? 'Top Event / Gate Record' : 'Gate Record' }}</div>
             <h2>{{ gate?.id }} · {{ gate?.description }}</h2>
           </div>
-          <button type="button" class="icon-button" (click)="close.emit()">×</button>
+          <button
+            type="button"
+            class="icon-button"
+            (pointerdown)="$event.stopPropagation()"
+            (click)="close.emit()">×</button>
         </header>
 
         <nav class="record-tabs">
@@ -118,9 +128,30 @@ type GateTab = 'main' | 'inputs' | 'basics' | 'attributes' | 'exchange' | 'memo'
     </div>
   `,
   styles: [`
-    .dialog-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(7, 22, 40, .45); display: grid; place-items: center; padding: 28px; }
-    .record-dialog { width: min(1040px, 94vw); height: min(720px, 88vh); background: #fff; border: 1px solid var(--nps-border); border-radius: 14px; box-shadow: 0 28px 80px rgba(2, 12, 27, .25); display: grid; grid-template-rows: auto auto 1fr auto; overflow: hidden; }
-    .dialog-header { padding: 16px 20px; background: var(--nps-topbar); color: #fff; display: flex; align-items: center; justify-content: space-between; }
+    .dialog-backdrop { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
+    .record-dialog {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(920px, 82vw);
+      height: min(620px, 78vh);
+      min-width: 420px;
+      min-height: 280px;
+      max-width: calc(100vw - 16px);
+      max-height: calc(100vh - 16px);
+      resize: both;
+      pointer-events: auto;
+      background: #fff;
+      border: 1px solid var(--nps-border);
+      border-radius: 10px;
+      box-shadow: 0 18px 48px rgba(2, 12, 27, .24);
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      overflow: hidden;
+    }
+    .record-dialog.moved { transform: none; }
+    .dialog-header { padding: 12px 14px; background: var(--nps-topbar); color: #fff; display: flex; align-items: center; justify-content: space-between; cursor: move; user-select: none; touch-action: none; }
     .dialog-header h2 { font-size: 17px; margin: 3px 0 0; }
     .eyebrow { font-size: 10px; text-transform: uppercase; color: #b9d2ee; letter-spacing: .08em; }
     .icon-button { border: 0; background: transparent; color: #fff; font-size: 24px; cursor: pointer; }
@@ -151,6 +182,11 @@ type GateTab = 'main' | 'inputs' | 'basics' | 'attributes' | 'exchange' | 'memo'
   `]
 })
 export class GateRecordDialogComponent {
+  windowPosition: { x: number; y: number } | null = null;
+  private dragging = false;
+  private dragOffsetX = 0;
+  private dragOffsetY = 0;
+
   @Input() gate: GateRecord | null = null;
   @Input() directInputs: FaultTreeNodeData[] = [];
   @Input() basicEvents: BasicEventRecord[] = [];
@@ -158,6 +194,39 @@ export class GateRecordDialogComponent {
   @Output() readonly openBasicEvent = new EventEmitter<BasicEventRecord>();
 
   tab: GateTab = 'main';
+
+  startDrag(event: PointerEvent): void {
+    if (event.button !== 0) return;
+    const header = event.currentTarget as HTMLElement | null;
+    const dialog = header?.closest('.record-dialog') as HTMLElement | null;
+    if (!dialog) return;
+
+    event.preventDefault();
+    const rect = dialog.getBoundingClientRect();
+    this.windowPosition = { x: rect.left, y: rect.top };
+    this.dragOffsetX = event.clientX - rect.left;
+    this.dragOffsetY = event.clientY - rect.top;
+    this.dragging = true;
+    header?.setPointerCapture?.(event.pointerId);
+  }
+
+  @HostListener('window:pointermove', ['$event'])
+  onDrag(event: PointerEvent): void {
+    if (!this.dragging) return;
+    const dialog = document.querySelector('app-gate-record-dialog .record-dialog') as HTMLElement | null;
+    if (!dialog) return;
+
+    const width = dialog.offsetWidth;
+    const height = dialog.offsetHeight;
+    const x = Math.max(0, Math.min(window.innerWidth - width, event.clientX - this.dragOffsetX));
+    const y = Math.max(0, Math.min(window.innerHeight - height, event.clientY - this.dragOffsetY));
+    this.windowPosition = { x: Math.round(x), y: Math.round(y) };
+  }
+
+  @HostListener('window:pointerup')
+  stopDrag(): void {
+    this.dragging = false;
+  }
 
   readonly tabs: readonly { key: GateTab; label: string }[] = [
     { key: 'main', label: 'Main' },
