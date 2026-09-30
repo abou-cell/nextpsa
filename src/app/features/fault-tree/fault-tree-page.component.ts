@@ -40,11 +40,6 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
             (click)="closeWorkspace($event, workspace.id)">×</button>
         </div>
         <div class="workspace-actions">
-          <button
-            *ngIf="!browserVisible()"
-            type="button"
-            title="Show Fault Tree list"
-            (click)="showBrowser()">Fault Trees</button>
           <button type="button">Validate</button>
           <button type="button" class="primary">Save model</button>
         </div>
@@ -52,9 +47,7 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
 
       <div
         class="workspace-body"
-        [style.grid-template-rows]="browserVisible()
-          ? 'minmax(0, 1fr) 8px ' + browserHeight() + 'px'
-          : 'minmax(0, 1fr) 0 0'">
+        [style.grid-template-rows]="'minmax(0, 1fr) 8px ' + browserHeight() + 'px'">
         <main class="diagram-panel">
           <app-fault-tree-editor
             #faultTreeEditor
@@ -67,7 +60,6 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
         </main>
 
         <div
-          *ngIf="browserVisible()"
           class="browser-resizer"
           [class.dragging]="isResizingBrowser"
           role="separator"
@@ -78,13 +70,15 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
           <span></span>
         </div>
 
-        <section *ngIf="browserVisible()" class="fault-tree-browser-panel">
+        <section class="fault-tree-browser-panel">
           <div class="ft-table-wrap">
             <table class="ft-table" aria-label="Fault Trees in project">
               <thead>
                 <tr>
                   <th scope="col">ID Fault Tree</th>
                   <th scope="col">Description</th>
+                  <th scope="col">Edited date</th>
+                  <th scope="col">Edited by</th>
                 </tr>
               </thead>
               <tbody>
@@ -99,6 +93,8 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
                   (keydown.space)="selectFaultTree(tree)">
                   <td class="ft-id">{{ tree.id }}</td>
                   <td class="ft-description">{{ tree.description }}</td>
+                  <td class="ft-edited-date">01/10/2026</td>
+                  <td class="ft-edited-by">AR</td>
                 </tr>
               </tbody>
             </table>
@@ -108,12 +104,6 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
               Fault Trees in project ({{ projectFaultTrees().length }})
               <span class="tagged-count">No of tagged records = {{ taggedFaultTreeCount() }}</span>
             </strong>
-            <button
-              type="button"
-              class="browser-close"
-              title="Close Fault Tree table"
-              aria-label="Close Fault Tree table"
-              (click)="closeBrowser()">×</button>
           </div>
         </section>
       </div>
@@ -168,12 +158,12 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .browser-footer { display: flex; align-items: center; gap: 12px; padding: 0 8px 0 12px; border-top: 1px solid var(--nps-border); background: #f8fafc; }
     .browser-footer strong { font-size: 10px; color: var(--nps-text); }
     .tagged-count { margin-left: 10px; color: var(--nps-text-muted); font-weight: 600; }
-    .browser-close { margin-left: auto; width: 28px; height: 26px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #64748b; font-size: 18px; line-height: 1; cursor: pointer; }
-    .browser-close:hover { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }
     .ft-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: #fff; color: #111827; }
     .ft-table th, .ft-table td { height: 38px; padding: 0 14px; border-bottom: 1px solid #dfe6ee; border-right: 1px solid #dfe6ee; text-align: left; vertical-align: middle; font-size: 11px; color: #111827; background: transparent; opacity: 1; visibility: visible; }
     .ft-table th:last-child, .ft-table td:last-child { border-right: 0; }
-    .ft-table th:first-child, .ft-table td:first-child { width: 160px; }
+    .ft-table th:nth-child(1), .ft-table td:nth-child(1) { width: 160px; }
+    .ft-table th:nth-child(3), .ft-table td:nth-child(3) { width: 130px; }
+    .ft-table th:nth-child(4), .ft-table td:nth-child(4) { width: 90px; }
     .ft-table thead th { position: sticky; top: 0; z-index: 3; background: #f3f6fa; color: #1f2937; font-weight: 800; }
     .ft-table tbody tr { cursor: pointer; background: #fff; }
     .ft-table tbody tr:hover { background: #f6f9fd; }
@@ -192,7 +182,6 @@ export class FaultTreePageComponent {
   @ViewChild('faultTreeEditor') private faultTreeEditor?: FaultTreeEditorComponent;
 
   readonly browserHeight = signal(178);
-  readonly browserVisible = signal(true);
   isResizingBrowser = false;
   private resizeStartY = 0;
   private resizeStartHeight = 178;
@@ -236,17 +225,6 @@ export class FaultTreePageComponent {
       this.repository.selectFaultTree(workspace.faultTreeId);
       this.selectedNode.set(null);
     });
-  }
-
-  closeBrowser(): void {
-    this.browserVisible.set(false);
-    this.isResizingBrowser = false;
-    requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
-  }
-
-  showBrowser(): void {
-    this.browserVisible.set(true);
-    requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
   }
 
   startBrowserResize(event: PointerEvent): void {
