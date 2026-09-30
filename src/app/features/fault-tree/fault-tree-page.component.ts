@@ -165,7 +165,7 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .workspace-close:disabled { opacity: .25; cursor: default; }
 
     .editor-grid { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 290px; background: var(--nps-app-bg); }
-    .diagram-panel { min-width: 0; min-height: 0; border-right: 1px solid var(--nps-border); }
+    .diagram-panel { min-width: 0; min-height: 0; overflow: hidden; border-right: 1px solid var(--nps-border); }
     .properties-panel { background: #fff; overflow: auto; min-width: 0; }
     .dock-title { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 13px; border-bottom: 1px solid var(--nps-border); font-size: 11px; }
     .dock-title span { color: var(--nps-text-muted); font-size: 9px; }
@@ -178,7 +178,7 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .interaction-help, .empty { margin: 0 13px 13px; color: var(--nps-text-muted); font-size: 10px; line-height: 1.5; }
     .empty { padding: 16px 0; }
 
-    .fault-tree-browser { min-height: 0; background: #fff; border-top: 1px solid var(--nps-border); overflow: hidden; }
+    .fault-tree-browser { position: relative; z-index: 5; min-height: 0; background: #fff; border-top: 1px solid var(--nps-border); overflow: hidden; }
     .browser-title { height: 38px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-bottom: 1px solid var(--nps-border); }
     .browser-title strong { font-size: 10px; }
     .browser-title span { color: var(--nps-text-muted); font-size: 9px; }
