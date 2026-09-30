@@ -63,8 +63,8 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
             *ngIf="propertiesOpen()"
             class="properties-window"
             [class.docked]="propertiesDocked()"
-            [style.left.px]="!propertiesDocked() && propertiesPosition() ? propertiesPosition()!.x : null"
-            [style.top.px]="!propertiesDocked() && propertiesPosition() ? propertiesPosition()!.y : null"
+            [style.left.px]="!propertiesDocked() ? propertiesPosition()?.x : null"
+            [style.top.px]="!propertiesDocked() ? propertiesPosition()?.y : null"
             [style.right]="!propertiesDocked() && !propertiesPosition() ? '10px' : null"
             aria-label="Properties">
             <div
@@ -426,12 +426,16 @@ export class FaultTreePageComponent {
   }
 
   openPropertiesWindow(): void {
+    this.propertiesDocked.set(false);
+    this.propertiesPosition.set(null);
     this.propertiesOpen.set(true);
     requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
   }
 
   closePropertiesWindow(): void {
     this.propertiesOpen.set(false);
+    this.propertiesDocked.set(false);
+    this.propertiesPosition.set(null);
     this.isDraggingProperties = false;
     requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
   }
