@@ -70,20 +70,6 @@ export class MockPsaRepository {
       ]
     },
     {
-      id: 'AC-SUPPLY',
-      description: 'AC power supply failure',
-      topGateId: 'AC-SUPPLY',
-      nodes: [
-        { key: 'AC-SUPPLY', category: 'TOP_EVENT', id: 'AC-SUPPLY', description: 'AC power supply failure', state: 'NORMAL', gateType: 'OR', recordType: 'GAT' },
-        { key: 'DG1-FS-AC', category: 'BASIC_EVENT', id: 'DG1-FS', description: 'Diesel generator 1 fails to start', state: 'NORMAL', reliabilityModel: 3, symbol: 'CIRCLE', recordType: 'BEV' },
-        { key: 'DG2-FS-AC', category: 'BASIC_EVENT', id: 'DG2-FS', description: 'Diesel generator 2 fails to start', state: 'NORMAL', reliabilityModel: 3, symbol: 'CIRCLE', recordType: 'BEV' }
-      ],
-      links: [
-        { key: 'AC-L1', from: 'AC-SUPPLY', to: 'DG1-FS-AC' },
-        { key: 'AC-L2', from: 'AC-SUPPLY', to: 'DG2-FS-AC' }
-      ]
-    },
-    {
       id: 'MAKEUP-FT',
       description: 'Spent fuel pool make-up unavailable',
       topGateId: 'MAKEUP-FT',
