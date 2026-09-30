@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, effect, signal } from '@angular/core';
+import { Component, HostListener, ViewChild, computed, effect, signal } from '@angular/core';
 import { BasicEventRecord, FaultTreeModel, FaultTreeNodeData, GateRecord } from '../../core/models/psa.models';
 import { MockPsaRepository } from '../../core/data/mock-psa.repository';
 import { FaultTreeEditorComponent } from '../../gojs/fault-tree/fault-tree-editor.component';
@@ -45,9 +45,12 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
         </div>
       </div>
 
-      <div class="editor-grid">
+      <div
+        class="workspace-body"
+        [style.grid-template-rows]="'minmax(0, 1fr) 8px ' + browserHeight() + 'px'">
         <main class="diagram-panel">
           <app-fault-tree-editor
+            #faultTreeEditor
             [model]="repository.faultTree()"
             (selectedNodeChange)="onSelection($event)"
             (recordOpen)="openRecord($event)"
@@ -55,9 +58,21 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
           </app-fault-tree-editor>
         </main>
 
-        <aside class="fault-tree-browser-panel">
+        <div
+          class="browser-resizer"
+          [class.dragging]="isResizingBrowser"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize Fault Tree list"
+          title="Drag to resize the Fault Tree list"
+          (pointerdown)="startBrowserResize($event)">
+          <span></span>
+        </div>
+
+        <section class="fault-tree-browser-panel">
           <div class="browser-title">
             <strong>Fault Trees in project (3)</strong>
+            <span>Drag the separator above to resize this panel.</span>
           </div>
           <div class="ft-table-wrap">
             <table class="ft-table" aria-label="Fault Trees in project">
@@ -81,7 +96,7 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
               </tbody>
             </table>
           </div>
-        </aside>
+        </section>
       </div>
 
     </section>
@@ -123,11 +138,16 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .workspace-actions button { height: 31px; border: 1px solid var(--nps-border); border-radius: 8px; background: #fff; color: var(--nps-text); padding: 0 12px; font-size: 10px; cursor: pointer; }
     .workspace-actions button.primary { background: var(--nps-blue); color: #fff; border-color: var(--nps-blue); }
 
-    .editor-grid { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 350px; background: var(--nps-app-bg); }
-    .diagram-panel { min-width: 0; min-height: 0; overflow: hidden; border-right: 1px solid var(--nps-border); }
-    .fault-tree-browser-panel { min-width: 0; min-height: 0; overflow: hidden; background: #fff; display: grid; grid-template-rows: 42px minmax(0, 1fr); }
-    .browser-title { display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--nps-border); background: #fff; }
+    .workspace-body { min-height: 0; display: grid; background: var(--nps-app-bg); overflow: hidden; }
+    .diagram-panel { min-width: 0; min-height: 0; overflow: hidden; }
+    .browser-resizer { position: relative; z-index: 8; cursor: row-resize; background: #eef3f8; border-top: 1px solid #d5dee8; border-bottom: 1px solid #d5dee8; touch-action: none; }
+    .browser-resizer:hover, .browser-resizer.dragging { background: #dbeafe; }
+    .browser-resizer span { position: absolute; left: 50%; top: 50%; width: 42px; height: 3px; border-radius: 999px; background: #94a3b8; transform: translate(-50%, -50%); }
+    .browser-resizer:hover span, .browser-resizer.dragging span { background: var(--nps-blue); }
+    .fault-tree-browser-panel { min-width: 0; min-height: 0; overflow: hidden; background: #fff; display: grid; grid-template-rows: 38px minmax(0, 1fr); }
+    .browser-title { display: flex; align-items: center; gap: 12px; padding: 0 12px; border-bottom: 1px solid var(--nps-border); background: #fff; }
     .browser-title strong { font-size: 11px; }
+    .browser-title span { color: var(--nps-text-muted); font-size: 9px; }
     .ft-table-wrap { min-height: 0; overflow: auto; background: #fff; }
     .ft-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: #fff; color: #111827; }
     .ft-table th, .ft-table td { height: 38px; padding: 0 14px; border-bottom: 1px solid #dfe6ee; border-right: 1px solid #dfe6ee; text-align: left; vertical-align: middle; font-size: 11px; color: #111827; background: transparent; opacity: 1; visibility: visible; }
@@ -142,12 +162,18 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .ft-description { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     @media (max-width: 1150px) {
-      .editor-grid { grid-template-columns: minmax(0, 1fr) 300px; }
       .workspace-select { min-width: 132px; }
     }
   `]
 })
 export class FaultTreePageComponent {
+  @ViewChild('faultTreeEditor') private faultTreeEditor?: FaultTreeEditorComponent;
+
+  readonly browserHeight = signal(178);
+  isResizingBrowser = false;
+  private resizeStartY = 0;
+  private resizeStartHeight = 178;
+
   readonly projectFaultTrees = computed(() => this.repository.faultTrees().slice(0, 3));
   readonly selectedNode = signal<FaultTreeNodeData | null>(null);
   readonly openGate = signal<GateRecord | null>(null);
@@ -182,6 +208,35 @@ export class FaultTreePageComponent {
       this.repository.selectFaultTree(workspace.faultTreeId);
       this.selectedNode.set(null);
     });
+  }
+
+  startBrowserResize(event: PointerEvent): void {
+    event.preventDefault();
+    this.isResizingBrowser = true;
+    this.resizeStartY = event.clientY;
+    this.resizeStartHeight = this.browserHeight();
+
+    const target = event.currentTarget as HTMLElement | null;
+    target?.setPointerCapture?.(event.pointerId);
+  }
+
+  @HostListener('window:pointermove', ['$event'])
+  onBrowserResizeMove(event: PointerEvent): void {
+    if (!this.isResizingBrowser) return;
+
+    const delta = this.resizeStartY - event.clientY;
+    const maxHeight = Math.max(120, Math.min(420, window.innerHeight * 0.48));
+    const nextHeight = Math.max(96, Math.min(maxHeight, this.resizeStartHeight + delta));
+
+    this.browserHeight.set(Math.round(nextHeight));
+    requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
+  }
+
+  @HostListener('window:pointerup')
+  stopBrowserResize(): void {
+    if (!this.isResizingBrowser) return;
+    this.isResizingBrowser = false;
+    requestAnimationFrame(() => this.faultTreeEditor?.refreshViewport());
   }
 
   activateWorkspace(id: number): void {
