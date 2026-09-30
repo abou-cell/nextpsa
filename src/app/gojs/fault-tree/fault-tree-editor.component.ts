@@ -747,14 +747,15 @@ class RiskSpectrumBranchLink extends go.Link {
     </div>
   `,
   styles: [`
-    :host { display: block; height: 100%; min-height: 520px; }
-    .ft-shell { height: 100%; background: #fff; }
+    :host { display: block; height: 100%; min-height: 0; overflow: hidden; }
+    .ft-shell { height: 100%; min-height: 0; overflow: hidden; background: #fff; }
     .diagram-shell {
       min-width: 0;
       min-height: 0;
       height: 100%;
+      overflow: hidden;
       display: grid;
-      grid-template-rows: 42px 56px 1fr;
+      grid-template-rows: 42px 56px minmax(0, 1fr);
     }
 
     .diagram-toolbar {
@@ -930,9 +931,11 @@ class RiskSpectrumBranchLink extends go.Link {
     }
 
     .diagram-canvas {
-      min-height: 470px;
+      min-width: 0;
+      min-height: 0;
       width: 100%;
       height: 100%;
+      overflow: hidden;
       background: #fff;
     }
 
