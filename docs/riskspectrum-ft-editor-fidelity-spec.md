@@ -604,8 +604,8 @@ Available tag colours:
 
 Interaction:
 
-- select one FT component and press `Ctrl/Cmd+T` to apply the currently active tag colour;
-- after **Select branch**, `Ctrl/Cmd+T` applies the colour to every selected node in that branch;
+- select one FT component and press `Alt+T` to apply the currently active tag colour;
+- after **Select branch**, `Alt+T` applies the colour to every selected node in that branch;
 - context-menu **Tag** applies the active colour;
 - context-menu **Untag** removes the colour;
 - right-clicking an unselected component before Tag/Untag acts on that component only;

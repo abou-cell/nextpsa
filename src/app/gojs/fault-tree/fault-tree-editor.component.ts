@@ -109,11 +109,14 @@ class FaultTreeCommandHandler extends go.CommandHandler {
       return;
     }
 
-    // RiskSpectrum-style Tag shortcut. Ctrl/Cmd+T applies the currently
-    // selected tag colour to one selected component or a selected branch.
-    if (modifier && key === 't' && this.canTagAction?.()) {
+    // RiskSpectrum-style Tag shortcut. Alt+T avoids the browser Ctrl/Cmd+T
+    // shortcut that opens a new tab.
+    const altModifier = Boolean(input?.alt);
+
+    if (altModifier && key === 't' && this.canTagAction?.()) {
       const nativeEvent = input?.event as KeyboardEvent | null | undefined;
       nativeEvent?.preventDefault();
+      nativeEvent?.stopPropagation();
       this.tagAction?.();
       return;
     }
@@ -1338,7 +1341,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         menuButton('Select branch', 'SELECT_BRANCH'),
         menuButton('Select inputs', 'SELECT_INPUTS'),
         menuSeparator(),
-        menuButton('Tag     Ctrl+T', 'TAG'),
+        menuButton('Tag     Alt+T', 'TAG'),
         menuButton('Untag', 'UNTAG'),
         menuSeparator(),
         menuButton('Cut     Ctrl+X', 'CUT'),
@@ -1372,7 +1375,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         menuButton('Select branch', 'SELECT_BRANCH', false),
         menuButton('Select inputs', 'SELECT_INPUTS', false),
         menuSeparator(),
-        menuButton('Tag     Ctrl+T', 'TAG'),
+        menuButton('Tag     Alt+T', 'TAG'),
         menuButton('Untag', 'UNTAG'),
         menuSeparator(),
         menuButton('Cut     Ctrl+X', 'CUT'),
