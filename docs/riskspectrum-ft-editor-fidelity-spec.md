@@ -616,3 +616,22 @@ Presentation rule:
 - only the record box background is coloured;
 - Gate/BE/HE/Transfer symbols and branch links keep the normal RiskSpectrum drawing colours;
 - tag colour is stored on the FT node data as `tagColor`, so Copy/Cut/Paste preserve it.
+
+
+## Tag colour on FT symbols
+
+A component tag colours both the record box and the visible FT symbol.
+
+Tagged visual elements include:
+
+- OR / AND / NAND / NOR / XOR gate bodies;
+- NAND / NOR inversion bubble;
+- K/N gate rectangle;
+- Basic Event circle;
+- Undeveloped Event diamond;
+- House Event symbol;
+- Transfer / Exchange Event symbol.
+
+The symbol outline and all FT branch/link strokes remain black for readability.
+
+Untag restores both the record box and the symbol fill to white/default.
