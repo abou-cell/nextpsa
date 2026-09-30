@@ -3520,6 +3520,11 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     this.diagram.model = model;
     this.diagram.layoutDiagram(true);
+
+    // When another Fault Tree is selected from the project table, present the
+    // complete tree immediately in the available editor viewport.
+    this.diagram.commandHandler.zoomToFit();
+    this.updateZoomLabel();
   }
 
   private updateZoomLabel(): void {
