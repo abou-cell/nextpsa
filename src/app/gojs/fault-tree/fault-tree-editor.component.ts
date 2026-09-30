@@ -2387,7 +2387,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         to: String(root.key),
         fromPort: 'OUT' as const,
         toPort: 'IN' as const,
-        negated: Boolean(previous?.['negated'])
+        negated: previous
+          ? Boolean(previous['negated'])
+          : Boolean((root.data as FaultTreeNodeData).negated)
       };
     });
 
@@ -2516,7 +2518,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       to: String(node.key),
       fromPort: 'OUT' as const,
       toPort: 'IN' as const,
-      negated: false
+      negated: Boolean(childData.negated)
     };
 
     graphModel.addLinkData(linkData);
@@ -3060,7 +3062,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           to: rootKey,
           fromPort: 'OUT',
           toPort: 'IN',
-          negated: false
+          negated: Boolean(rootData.negated)
         };
 
         graphModel.addLinkData(link);
@@ -3162,19 +3164,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         return;
       }
 
-      case 'NEGATE': {
-        const incoming = node.findLinksInto().first();
-        if (!incoming) return;
-        diagram.startTransaction('Negate fault-tree node');
-        const model = diagram.model as go.GraphLinksModel;
-        model.setDataProperty(
-          incoming.data,
-          'negated',
-          !Boolean((incoming.data as { negated?: boolean }).negated)
-        );
-        diagram.commitTransaction('Negate fault-tree node');
+      case 'NEGATE':
+        this.toggleNegateNode(node);
         return;
-      }
 
       case 'SELECT_BRANCH': {
         diagram.clearSelection();
@@ -3351,7 +3343,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         to: String(child.key),
         fromPort: 'OUT' as const,
         toPort: 'IN' as const,
-        negated: false
+        negated: Boolean((child.data as FaultTreeNodeData).negated)
       };
 
       model.addLinkData(linkData);
@@ -3450,11 +3442,16 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     this.branchAttachParentId = null;
 
     const siblingOrderByKey = new Map<string, number>();
+    const incomingNegatedByKey = new Map<string, boolean>();
     const parentCounts = new Map<string, number>();
+
     this.model.links.forEach((link) => {
       const parentKey = String(link.from);
+      const childKey = String(link.to);
       const index = parentCounts.get(parentKey) ?? 0;
-      siblingOrderByKey.set(String(link.to), index);
+
+      siblingOrderByKey.set(childKey, index);
+      incomingNegatedByKey.set(childKey, Boolean(link.negated));
       parentCounts.set(parentKey, index + 1);
     });
 
@@ -3465,7 +3462,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           ? (node.symbol ?? 'CIRCLE')
           : node.symbol,
         templateCategory: this.resolveTemplateCategory(node),
-        siblingOrder: node.siblingOrder ?? siblingOrderByKey.get(String(node.key)) ?? 0
+        siblingOrder: node.siblingOrder ?? siblingOrderByKey.get(String(node.key)) ?? 0,
+        negated: incomingNegatedByKey.has(String(node.key))
+          ? incomingNegatedByKey.get(String(node.key))
+          : Boolean(node.negated)
       })),
       this.model.links.map((link) => ({
         ...link,
