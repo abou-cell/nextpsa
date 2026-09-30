@@ -103,15 +103,18 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
             <span>ID Fault Tree</span>
             <span>Description</span>
           </div>
-          <button
-            type="button"
-            class="ft-row"
+          <div
+            class="ft-row ft-data-row"
             *ngFor="let tree of projectFaultTrees()"
             [class.selected]="tree.id === repository.faultTree().id"
-            (click)="selectFaultTree(tree)">
-            <strong>{{ tree.id }}</strong>
-            <span>{{ tree.description }}</span>
-          </button>
+            role="button"
+            tabindex="0"
+            (click)="selectFaultTree(tree)"
+            (keydown.enter)="selectFaultTree(tree)"
+            (keydown.space)="selectFaultTree(tree)">
+            <strong class="ft-id">{{ tree.id }}</strong>
+            <span class="ft-description">{{ tree.description }}</span>
+          </div>
         </div>
       </section>
     </section>
@@ -176,15 +179,17 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .browser-title strong { font-size: 10px; }
     .browser-title span { color: var(--nps-text-muted); font-size: 9px; }
     .ft-table { height: calc(100% - 38px); overflow: auto; }
-    .ft-row { width: 100%; min-height: 32px; display: grid; grid-template-columns: 145px minmax(0, 1fr); align-items: center; border: 0; border-bottom: 1px solid #e8edf3; background: #fff; color: var(--nps-text); text-align: left; padding: 0; font: inherit; }
-    button.ft-row { cursor: pointer; }
-    button.ft-row:hover { background: #f6f9fd; }
-    .ft-row > * { min-height: 32px; display: flex; align-items: center; padding: 0 14px; border-right: 1px solid #e8edf3; font-size: 10px; }
+    .ft-row { width: 100%; height: 38px; display: grid; grid-template-columns: 160px minmax(0, 1fr); align-items: stretch; border-bottom: 1px solid #dfe6ee; background: #fff; color: #111827; text-align: left; padding: 0; }
+    .ft-data-row { cursor: pointer; }
+    .ft-data-row:hover { background: #f6f9fd; }
+    .ft-row > * { min-width: 0; display: flex; align-items: center; padding: 0 14px; border-right: 1px solid #dfe6ee; font-size: 11px; color: #111827 !important; opacity: 1 !important; visibility: visible !important; }
     .ft-row > *:last-child { border-right: 0; }
-    .ft-header { position: sticky; top: 0; z-index: 2; background: #f7f9fc; font-weight: 800; }
-    .ft-header span { color: #334155; }
-    button.ft-row.selected { background: #edf4ff; box-shadow: inset 3px 0 0 var(--nps-blue); }
-    button.ft-row.selected strong { color: var(--nps-blue); }
+    .ft-header { position: sticky; top: 0; z-index: 3; background: #f3f6fa; font-weight: 800; }
+    .ft-header span { color: #1f2937 !important; }
+    .ft-data-row.selected { background: #edf4ff; box-shadow: inset 3px 0 0 var(--nps-blue); }
+    .ft-data-row.selected .ft-id { color: var(--nps-blue) !important; font-weight: 800; }
+    .ft-id { font-weight: 700; }
+    .ft-description { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     @media (max-width: 1150px) {
       .editor-grid { grid-template-columns: minmax(0, 1fr) 250px; }
