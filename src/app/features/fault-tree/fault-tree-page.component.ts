@@ -258,7 +258,7 @@ export class FaultTreePageComponent {
   private activeRowResizeId: string | null = null;
   private activeRowResizeIds: string[] = [];
   private rowResizeStartY = 0;
-  private rowResizeStartHeight = 38;
+  private rowResizeStartHeight = 23;
 
   readonly projectFaultTrees = computed(() => this.repository.faultTrees().slice(0, 3));
   readonly taggedFaultTreeCount = computed(() =>
@@ -307,7 +307,7 @@ export class FaultTreePageComponent {
   }
 
   rowHeight(treeId: string): number {
-    return this.rowHeights()[treeId] ?? 38;
+    return this.rowHeights()[treeId] ?? 23;
   }
 
   startColumnResize(event: PointerEvent, columnIndex: number): void {
@@ -387,8 +387,7 @@ export class FaultTreePageComponent {
 
     if (this.activeRowResizeId) {
       const delta = event.clientY - this.rowResizeStartY;
-      // Default row height is 38 px. Allow compression down to 23 px,
-      // i.e. about -40%, while keeping the text and resize handle usable.
+      // Default row height is already compacted by ~40%: 23 px instead of 38 px.
       const nextHeight = Math.max(23, Math.min(120, this.rowResizeStartHeight + delta));
 
       this.rowHeights.update((heights) => {
