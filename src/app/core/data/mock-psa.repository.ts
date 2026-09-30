@@ -98,6 +98,16 @@ export class MockPsaRepository {
     }
   }
 
+  setFaultTreeTagColor(id: string, tagColor: string | null): void {
+    this.faultTrees.update((trees) =>
+      trees.map((tree) =>
+        tree.id === id
+          ? { ...tree, tagColor }
+          : tree
+      )
+    );
+  }
+
 
   readonly basicEvents = signal<BasicEventRecord[]>([
     this.be('PTR101PO-FS', 'PTR train A pump fails to start', 3, 'Q_PTR_A_FS', 2.5e-3, 'PTR', 'PTR101PO'),
