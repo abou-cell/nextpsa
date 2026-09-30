@@ -927,6 +927,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   branchAttachParentId: string | null = null;
 
   layoutMode: FaultTreeLayoutMode = 'LEFT';
+  activeTagColor = '#fff200';
+  tagPaletteOpen = false;
   zoomPercent = 100;
 
   constructor(private readonly zone: NgZone) {}
@@ -976,6 +978,42 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       this.diagram.centerRect(this.diagram.documentBounds);
       this.updateZoomLabel();
     }
+  }
+
+  toggleTagPalette(): void {
+    this.tagPaletteOpen = !this.tagPaletteOpen;
+  }
+
+  selectTagColor(color: string): void {
+    this.activeTagColor = color;
+    this.tagPaletteOpen = false;
+  }
+
+  private tagSelectedNodes(
+    diagram: go.Diagram,
+    color: string | null
+  ): boolean {
+    const nodes: go.Node[] = [];
+
+    diagram.selection.each((part) => {
+      if (part instanceof go.Node) nodes.push(part);
+    });
+
+    if (!nodes.length) return false;
+
+    const graphModel = diagram.model as go.GraphLinksModel;
+    diagram.startTransaction(color ? 'Tag Fault Tree selection' : 'Untag Fault Tree selection');
+
+    nodes.forEach((node) => {
+      const data = node.data as FaultTreeNodeData;
+      graphModel.setDataProperty(data, 'tagColor', color);
+
+      const source = this.model.nodes.find((item) => item.key === data.key);
+      if (source) source.tagColor = color;
+    });
+
+    diagram.commitTransaction(color ? 'Tag Fault Tree selection' : 'Untag Fault Tree selection');
+    return true;
   }
 
   fit(): void {
