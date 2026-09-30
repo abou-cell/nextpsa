@@ -637,6 +637,16 @@ class RiskSpectrumBranchLink extends go.Link {
             <span class="zoom-label">{{ zoomPercent }}%</span>
             <button type="button" title="Zoom in" (click)="zoom(0.1)">+</button>
             <button type="button" (click)="fit()">Fit</button>
+            <button
+              type="button"
+              class="negate-button"
+              [class.active]="isSelectedNodeNegated()"
+              [disabled]="!canNegateSelection()"
+              title="Toggle Negate / NOT on selected component"
+              aria-label="Toggle Negate on selected component"
+              (click)="toggleNegateSelection()">
+              {{ isSelectedNodeNegated() ? '✓ Negate' : '○ Negate' }}
+            </button>
             <div class="tag-color-control" [class.open]="tagPaletteOpen">
               <button
                 type="button"
@@ -757,6 +767,24 @@ class RiskSpectrumBranchLink extends go.Link {
       font-weight: 600;
     }
     .toolbar-group button:hover { background: #eef5ff; border-color: #b6cdf7; }
+    .toolbar-group button.negate-button {
+      min-width: 72px;
+      padding: 0 8px;
+      font-size: 10px;
+    }
+    .toolbar-group button.negate-button.active {
+      color: #0f5bd8;
+      border-color: #6ea2f8;
+      background: #eaf2ff;
+      box-shadow: inset 0 0 0 1px #b7d0fb;
+    }
+    .toolbar-group button.negate-button:disabled {
+      opacity: 0.42;
+      cursor: default;
+      background: #fff;
+      border-color: var(--nps-border);
+      color: #64748b;
+    }
     .tag-color-control {
       position: relative;
       display: inline-flex;
@@ -983,6 +1011,95 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     }
   }
 
+  private selectedSingleNegatableNode(diagram: go.Diagram): go.Node | null {
+    const nodes: go.Node[] = [];
+
+    diagram.selection.each((part) => {
+      if (part instanceof go.Node) nodes.push(part);
+    });
+
+    if (nodes.length !== 1) return null;
+
+    const node = nodes[0];
+    const data = node.data as FaultTreeNodeData;
+
+    // Top Event has no incoming logical relation and cannot be negated.
+    // Detached components are allowed: their node-level negate state is kept
+    // and will be inherited by the relation when they are attached later.
+    if (data.category === 'TOP_EVENT') return null;
+
+    return node;
+  }
+
+  canNegateSelection(): boolean {
+    return Boolean(
+      this.diagram &&
+      this.selectedSingleNegatableNode(this.diagram)
+    );
+  }
+
+  isSelectedNodeNegated(): boolean {
+    if (!this.diagram) return false;
+
+    const node = this.selectedSingleNegatableNode(this.diagram);
+    if (!node) return false;
+
+    const incoming = node.findLinksInto().first();
+    const nodeData = node.data as FaultTreeNodeData;
+    const linkData = incoming?.data as FaultTreeLinkData | undefined;
+
+    return Boolean(
+      nodeData.negated ??
+      linkData?.negated
+    );
+  }
+
+  toggleNegateSelection(): void {
+    if (!this.diagram) return;
+
+    const node = this.selectedSingleNegatableNode(this.diagram);
+    if (!node) return;
+
+    this.toggleNegateNode(node);
+  }
+
+  private toggleNegateNode(node: go.Node): boolean {
+    const diagram = node.diagram;
+    if (!diagram) return false;
+
+    const nodeData = node.data as FaultTreeNodeData;
+    if (nodeData.category === 'TOP_EVENT') return false;
+
+    const incoming = node.findLinksInto().first();
+    const linkData = incoming?.data as FaultTreeLinkData | undefined;
+    const current = Boolean(nodeData.negated ?? linkData?.negated);
+    const next = !current;
+    const graphModel = diagram.model as go.GraphLinksModel;
+
+    diagram.startTransaction(next ? 'Negate fault-tree node' : 'Unnegate fault-tree node');
+
+    // Node state drives the visible NOT marker. When attached, mirror the same
+    // state to the incoming relation used by the FT logical model.
+    graphModel.setDataProperty(nodeData, 'negated', next);
+    if (linkData) {
+      graphModel.setDataProperty(linkData, 'negated', next);
+    }
+
+    diagram.commitTransaction(next ? 'Negate fault-tree node' : 'Unnegate fault-tree node');
+
+    const sourceNode = this.model.nodes.find((item) => item.key === nodeData.key);
+    if (sourceNode) sourceNode.negated = next;
+
+    if (linkData) {
+      const sourceLink = this.model.links.find(
+        (item) => String(item.key) === String(linkData.key)
+      );
+      if (sourceLink) sourceLink.negated = next;
+    }
+
+    return true;
+  }
+
   toggleTagPalette(): void {
     this.tagPaletteOpen = !this.tagPaletteOpen;
   }
@@ -1130,6 +1247,19 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
             verticalAlignment: go.Spot.Center
           }, new go.Binding('text', 'id'))
         )
+      );
+
+    const negateMarker = () =>
+      $(go.Shape, 'Circle', {
+          name: 'NEGATE_MARKER',
+          desiredSize: new go.Size(8, 8),
+          fill: '#ffffff',
+          stroke: '#111111',
+          strokeWidth: 1.1,
+          alignment: go.Spot.Top,
+          visible: false
+        },
+        new go.Binding('visible', 'negated', Boolean)
       );
 
     /**
@@ -1340,12 +1470,48 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         })
       );
 
+    const negateMenuButton = () =>
+      $('ContextMenuButton',
+        {
+          height: 25,
+          stretch: go.Stretch.Horizontal,
+          click: (_event: go.InputEvent, obj: go.GraphObject) => {
+            const node = contextNode(obj);
+            if (!node) return;
+            this.handleContextAction('NEGATE', node);
+          }
+        },
+        new go.Binding(
+          'isEnabled',
+          'category',
+          (category: FaultTreeNodeData['category']) => category !== 'TOP_EVENT'
+        ),
+        new go.Binding(
+          'opacity',
+          'category',
+          (category: FaultTreeNodeData['category']) => category === 'TOP_EVENT' ? 0.42 : 1
+        ),
+        $(go.TextBlock, {
+            width: 176,
+            margin: new go.Margin(3, 8),
+            font: '10px Inter, "Segoe UI", sans-serif',
+            stroke: '#111827',
+            textAlign: 'left'
+          },
+          new go.Binding(
+            'text',
+            'negated',
+            (negated: boolean | undefined) => negated ? '✓ Negate' : 'Negate'
+          )
+        )
+      );
+
     const gateContextMenu = () =>
       $('ContextMenu',
         menuButton('Edit Event...', 'EDIT'),
         menuButton('Change node Event...', 'CHANGE_NODE', false),
         menuButton('Add input node   ›', 'ADD_INPUT'),
-        menuButton('Negate node', 'NEGATE'),
+        negateMenuButton(),
         menuButton('State   ›', 'STATE'),
         menuSeparator(),
         menuButton('Edit Fault Tree...', 'EDIT_FAULT_TREE'),
@@ -1380,7 +1546,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         menuButton('Edit Event...', 'EDIT'),
         menuButton('Change node Event...', 'CHANGE_NODE'),
         menuButton('Add input node   ›', 'ADD_INPUT'),
-        menuButton('Negate node', 'NEGATE'),
+        negateMenuButton(),
         menuButton('State   ›', 'STATE'),
         menuSeparator(),
         menuButton('Edit Fault Tree...', 'EDIT_FAULT_TREE'),
@@ -1429,7 +1595,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           // artwork itself, so every link starts directly on the symbol with no gap.
           gateArtwork(gateType, true)
         ),
-        this.makeTopPort()
+        this.makeTopPort(),
+        negateMarker()
       );
 
     const makeTerminalNodeTemplate = (
@@ -1448,7 +1615,8 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
             artwork
           )
         ),
-        this.makeTopPort()
+        this.makeTopPort(),
+        negateMarker()
       );
 
     const diagram = $(go.Diagram, this.diagramDiv.nativeElement, {
@@ -2237,7 +2405,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         to: String(root.key),
         fromPort: 'OUT' as const,
         toPort: 'IN' as const,
-        negated: Boolean(previous?.['negated'])
+        negated: previous
+          ? Boolean(previous['negated'])
+          : Boolean((root.data as FaultTreeNodeData).negated)
       };
     });
 
@@ -2366,7 +2536,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       to: String(node.key),
       fromPort: 'OUT' as const,
       toPort: 'IN' as const,
-      negated: false
+      negated: Boolean(childData.negated)
     };
 
     graphModel.addLinkData(linkData);
@@ -2910,7 +3080,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           to: rootKey,
           fromPort: 'OUT',
           toPort: 'IN',
-          negated: false
+          negated: Boolean(rootData.negated)
         };
 
         graphModel.addLinkData(link);
@@ -3012,19 +3182,9 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         return;
       }
 
-      case 'NEGATE': {
-        const incoming = node.findLinksInto().first();
-        if (!incoming) return;
-        diagram.startTransaction('Negate fault-tree node');
-        const model = diagram.model as go.GraphLinksModel;
-        model.setDataProperty(
-          incoming.data,
-          'negated',
-          !Boolean((incoming.data as { negated?: boolean }).negated)
-        );
-        diagram.commitTransaction('Negate fault-tree node');
+      case 'NEGATE':
+        this.toggleNegateNode(node);
         return;
-      }
 
       case 'SELECT_BRANCH': {
         diagram.clearSelection();
@@ -3201,7 +3361,7 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         to: String(child.key),
         fromPort: 'OUT' as const,
         toPort: 'IN' as const,
-        negated: false
+        negated: Boolean((child.data as FaultTreeNodeData).negated)
       };
 
       model.addLinkData(linkData);
@@ -3300,11 +3460,16 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     this.branchAttachParentId = null;
 
     const siblingOrderByKey = new Map<string, number>();
+    const incomingNegatedByKey = new Map<string, boolean>();
     const parentCounts = new Map<string, number>();
+
     this.model.links.forEach((link) => {
       const parentKey = String(link.from);
+      const childKey = String(link.to);
       const index = parentCounts.get(parentKey) ?? 0;
-      siblingOrderByKey.set(String(link.to), index);
+
+      siblingOrderByKey.set(childKey, index);
+      incomingNegatedByKey.set(childKey, Boolean(link.negated));
       parentCounts.set(parentKey, index + 1);
     });
 
@@ -3315,7 +3480,10 @@ export class FaultTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           ? (node.symbol ?? 'CIRCLE')
           : node.symbol,
         templateCategory: this.resolveTemplateCategory(node),
-        siblingOrder: node.siblingOrder ?? siblingOrderByKey.get(String(node.key)) ?? 0
+        siblingOrder: node.siblingOrder ?? siblingOrderByKey.get(String(node.key)) ?? 0,
+        negated: incomingNegatedByKey.has(String(node.key))
+          ? incomingNegatedByKey.get(String(node.key))
+          : Boolean(node.negated)
       })),
       this.model.links.map((link) => ({
         ...link,

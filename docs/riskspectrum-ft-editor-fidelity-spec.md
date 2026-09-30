@@ -635,3 +635,29 @@ Tagged visual elements include:
 The symbol outline and all FT branch/link strokes remain black for readability.
 
 Untag restores both the record box and the symbol fill to white/default.
+
+
+## Negate / NOT node toggle
+
+The Fault Tree editor exposes a **Negate** button directly beside **Fit**.
+
+Behavior:
+
+- select one Gate or component and press **Negate** to toggle its NOT state;
+- the active state is shown by a small white circle with a black outline centered at the top of the component, matching the RiskSpectrum node-negation convention;
+- the toolbar button displays **✓ Negate** while the selected component is negated;
+- pressing the button again removes the marker and restores the normal state;
+- detached components may also be negated; when later attached, the new incoming relation inherits the pending negate state;
+- the Top Event is not negatable because it has no incoming logical relation.
+
+Context menu:
+
+- inactive state: **Negate**;
+- active state: **✓ Negate**;
+- selecting the item toggles the same state as the toolbar button.
+
+Model:
+
+- node data mirrors the visual state as `negated`;
+- when the component is attached, the incoming FT link carries the same `negated` value for the logical model;
+- Copy/Cut/Paste and branch reparenting preserve this state.
