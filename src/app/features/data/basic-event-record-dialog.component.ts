@@ -134,19 +134,20 @@ type BasicEventTab = 'main' | 'reliability' | 'uncertainty' | 'ccf' | 'condition
       pointer-events: auto;
       background: #fff;
       border: 1px solid var(--nps-border);
-      border-radius: 10px;
-      box-shadow: 0 18px 48px rgba(2, 12, 27, .26);
+      border-radius: 8px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, .18);
       display: grid;
       grid-template-rows: auto auto 1fr auto;
       overflow: hidden;
     }
     .record-dialog.moved { transform: none; }
-    .dialog-header { padding: 12px 14px; background: var(--nps-topbar); color: #fff; display: flex; justify-content: space-between; align-items: center; cursor: move; user-select: none; touch-action: none; }
-    .dialog-header h2 { margin: 3px 0 0; font-size: 17px; }
-    .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: #b9d2ee; }
-    .icon-button { border: 0; background: transparent; color: #fff; font-size: 24px; cursor: pointer; }
-    .record-tabs { display: flex; overflow-x: auto; padding: 0 14px; border-bottom: 1px solid var(--nps-border); }
-    .record-tabs button { border: 0; background: transparent; padding: 12px 13px; color: var(--nps-text-muted); border-bottom: 2px solid transparent; font-size: 11px; white-space: nowrap; cursor: pointer; }
+    .dialog-header { padding: 10px 12px; background: #f8fafc; color: var(--nps-text); display: flex; justify-content: space-between; align-items: center; cursor: move; user-select: none; touch-action: none; border-bottom: 1px solid var(--nps-border); }
+    .dialog-header h2 { margin: 2px 0 0; font-size: 13px; font-weight: 700; }
+    .eyebrow { font-size: 9px; text-transform: uppercase; letter-spacing: .07em; color: var(--nps-text-muted); }
+    .icon-button { width: 28px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #64748b; font-size: 18px; line-height: 1; cursor: pointer; }
+    .icon-button:hover { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }
+    .record-tabs { display: flex; overflow-x: auto; padding: 0 10px; border-bottom: 1px solid var(--nps-border); background: #fff; }
+    .record-tabs button { border: 0; background: transparent; padding: 9px 10px; color: var(--nps-text-muted); border-bottom: 2px solid transparent; font-size: 10px; white-space: nowrap; cursor: pointer; }
     .record-tabs button.active { color: var(--nps-blue); border-color: var(--nps-blue); font-weight: 700; }
     .dialog-body { overflow: auto; padding: 20px; }
     .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -162,7 +163,7 @@ type BasicEventTab = 'main' | 'reliability' | 'uncertainty' | 'ccf' | 'condition
     .tag-list { display: flex; gap: 8px; flex-wrap: wrap; }
     .tag-list span { padding: 7px 10px; border: 1px solid #bfdbfe; border-radius: 999px; color: #1d4ed8; background: #eff6ff; font-size: 11px; }
     .timeline { display: flex; gap: 10px; padding: 14px; border: 1px solid var(--nps-border); border-radius: 9px; font-size: 11px; }
-    .dialog-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--nps-border); background: #f8fbff; }
+    .dialog-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--nps-border); background: #f8fafc; }
     .version { margin-right: auto; color: var(--nps-text-muted); font-size: 10px; }
     .dialog-footer button { border: 1px solid var(--nps-border); background: #fff; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
     .dialog-footer button.primary { background: var(--nps-blue); border-color: var(--nps-blue); color: #fff; }

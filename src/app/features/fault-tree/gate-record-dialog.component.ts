@@ -144,19 +144,20 @@ type GateTab = 'main' | 'inputs' | 'basics' | 'attributes' | 'exchange' | 'memo'
       pointer-events: auto;
       background: #fff;
       border: 1px solid var(--nps-border);
-      border-radius: 10px;
-      box-shadow: 0 18px 48px rgba(2, 12, 27, .24);
+      border-radius: 8px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, .18);
       display: grid;
       grid-template-rows: auto auto 1fr auto;
       overflow: hidden;
     }
     .record-dialog.moved { transform: none; }
-    .dialog-header { padding: 12px 14px; background: var(--nps-topbar); color: #fff; display: flex; align-items: center; justify-content: space-between; cursor: move; user-select: none; touch-action: none; }
-    .dialog-header h2 { font-size: 17px; margin: 3px 0 0; }
-    .eyebrow { font-size: 10px; text-transform: uppercase; color: #b9d2ee; letter-spacing: .08em; }
-    .icon-button { border: 0; background: transparent; color: #fff; font-size: 24px; cursor: pointer; }
-    .record-tabs { display: flex; overflow-x: auto; padding: 0 14px; border-bottom: 1px solid var(--nps-border); }
-    .record-tabs button { border: 0; background: transparent; padding: 12px 13px; color: var(--nps-text-muted); font-size: 11px; white-space: nowrap; border-bottom: 2px solid transparent; cursor: pointer; }
+    .dialog-header { padding: 10px 12px; background: #f8fafc; color: var(--nps-text); display: flex; align-items: center; justify-content: space-between; cursor: move; user-select: none; touch-action: none; border-bottom: 1px solid var(--nps-border); }
+    .dialog-header h2 { font-size: 13px; margin: 2px 0 0; font-weight: 700; }
+    .eyebrow { font-size: 9px; text-transform: uppercase; color: var(--nps-text-muted); letter-spacing: .07em; }
+    .icon-button { width: 28px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #64748b; font-size: 18px; line-height: 1; cursor: pointer; }
+    .icon-button:hover { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }
+    .record-tabs { display: flex; overflow-x: auto; padding: 0 10px; border-bottom: 1px solid var(--nps-border); background: #fff; }
+    .record-tabs button { border: 0; background: transparent; padding: 9px 10px; color: var(--nps-text-muted); font-size: 10px; white-space: nowrap; border-bottom: 2px solid transparent; cursor: pointer; }
     .record-tabs button.active { color: var(--nps-blue); border-color: var(--nps-blue); font-weight: 700; }
     .dialog-body { min-height: 0; overflow: auto; padding: 20px; }
     .property-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -176,7 +177,7 @@ type GateTab = 'main' | 'inputs' | 'basics' | 'attributes' | 'exchange' | 'memo'
     .tag-list { display: flex; flex-wrap: wrap; gap: 8px; }
     .tag-list span { padding: 7px 10px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: 11px; }
     .timeline { display: flex; gap: 12px; align-items: center; padding: 14px; border: 1px solid var(--nps-border); border-radius: 9px; font-size: 11px; }
-    .dialog-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--nps-border); background: #f8fbff; }
+    .dialog-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--nps-border); background: #f8fafc; }
     button { border: 1px solid var(--nps-border); background: #fff; color: var(--nps-text); border-radius: 8px; padding: 8px 12px; font: inherit; cursor: pointer; }
     button.primary { background: var(--nps-blue); color: #fff; border-color: var(--nps-blue); }
   `]
