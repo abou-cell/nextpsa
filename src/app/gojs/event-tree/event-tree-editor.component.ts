@@ -156,6 +156,9 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       maxScale: 2
     });
 
+    this.diagram.toolManager.draggingTool.isEnabled = false;
+    this.diagram.toolManager.panningTool.isEnabled = false;
+
     this.diagram.addDiagramListener('ChangedSelection', () => {
       const node = this.diagram?.selection.first() as go.Node | null;
       const data = node?.data as { category?: string; key?: string } | undefined;
