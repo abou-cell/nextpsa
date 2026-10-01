@@ -15,21 +15,11 @@ const EVENT_TREES: EventTreeModel[] = [
       { key: 'IE', category: 'INITIATING', label: 'Large Loss Of Coolant\nAccident', code: 'ALOCA', columnIndex: 0 },
       { key: 'FE1', category: 'FUNCTION', label: 'Emergency Core Cooling', code: 'V', columnIndex: 1 },
       { key: 'FE2', category: 'FUNCTION', label: 'Residual Heat Removal', code: 'W', columnIndex: 2 },
-      { key: 'B1', category: 'BRANCH', label: 'ECC', columnIndex: 1, level: 0 },
-      { key: 'B2S', category: 'BRANCH', label: 'RHR', columnIndex: 2, level: -1 },
-      { key: 'B2F', category: 'BRANCH', label: 'RHR', columnIndex: 2, level: 1 },
       { key: 'S1', category: 'SEQUENCE', label: 'Sequence 1', sequenceNo: 1, frequency: '1.00E-04', consequence: 'CD3,OK,TEST', resultCode: '' },
       { key: 'S2', category: 'SEQUENCE', label: 'Sequence 2', sequenceNo: 2, frequency: '2.11E-09', consequence: 'CD,CD3', resultCode: 'W' },
       { key: 'S3', category: 'SEQUENCE', label: 'Sequence 3', sequenceNo: 3, frequency: '3.55E-07', consequence: 'CD,CD2,RC1', resultCode: 'V' }
     ],
-    links: [
-      { from: 'IE', to: 'B1' },
-      { from: 'B1', to: 'B2S', label: 'Success', outcome: 'SUCCESS' },
-      { from: 'B1', to: 'S3', label: 'Failure', outcome: 'FAILURE' },
-      { from: 'B2S', to: 'S1', label: 'Success', outcome: 'SUCCESS' },
-      { from: 'B2S', to: 'B2F', label: 'Failure', outcome: 'FAILURE' },
-      { from: 'B2F', to: 'S2', label: 'Failure', outcome: 'FAILURE' }
-    ],
+    links: [],
     editedDate: '01/10/2026',
     editedBy: 'AR'
   },
@@ -46,19 +36,11 @@ const EVENT_TREES: EventTreeModel[] = [
       { key: 'IE', category: 'INITIATING', label: 'Station Blackout', code: 'SBO', columnIndex: 0 },
       { key: 'FE1', category: 'FUNCTION', label: 'AC Power Recovery', code: 'ACR', columnIndex: 1 },
       { key: 'FE2', category: 'FUNCTION', label: 'Decay Heat Removal', code: 'DHR', columnIndex: 2 },
-      { key: 'B1', category: 'BRANCH', label: 'ACR', columnIndex: 1, level: 0 },
-      { key: 'B2', category: 'BRANCH', label: 'DHR', columnIndex: 2, level: -1 },
       { key: 'S1', category: 'SEQUENCE', label: 'Sequence 1', sequenceNo: 1, frequency: '4.20E-06', consequence: 'OK', resultCode: 'ACR' },
       { key: 'S2', category: 'SEQUENCE', label: 'Sequence 2', sequenceNo: 2, frequency: '8.50E-08', consequence: 'CD1', resultCode: 'DHR' },
       { key: 'S3', category: 'SEQUENCE', label: 'Sequence 3', sequenceNo: 3, frequency: '6.10E-07', consequence: 'CD2', resultCode: 'SBO' }
     ],
-    links: [
-      { from: 'IE', to: 'B1' },
-      { from: 'B1', to: 'B2', label: 'Success', outcome: 'SUCCESS' },
-      { from: 'B1', to: 'S3', label: 'Failure', outcome: 'FAILURE' },
-      { from: 'B2', to: 'S1', label: 'Success', outcome: 'SUCCESS' },
-      { from: 'B2', to: 'S2', label: 'Failure', outcome: 'FAILURE' }
-    ],
+    links: [],
     editedDate: '01/10/2026',
     editedBy: 'AR'
   },
@@ -75,19 +57,11 @@ const EVENT_TREES: EventTreeModel[] = [
       { key: 'IE', category: 'INITIATING', label: 'Loss of SFP Cooling', code: 'LOPC-SFP', columnIndex: 0 },
       { key: 'FE1', category: 'FUNCTION', label: 'Make-up Available', code: 'MU', columnIndex: 1 },
       { key: 'FE2', category: 'FUNCTION', label: 'Cooling Recovery', code: 'REC', columnIndex: 2 },
-      { key: 'B1', category: 'BRANCH', label: 'MU', columnIndex: 1, level: 0 },
-      { key: 'B2', category: 'BRANCH', label: 'REC', columnIndex: 2, level: -1 },
       { key: 'S1', category: 'SEQUENCE', label: 'Sequence 1', sequenceNo: 1, frequency: '6.10E-04', consequence: 'SFP-OK', resultCode: 'REC' },
       { key: 'S2', category: 'SEQUENCE', label: 'Sequence 2', sequenceNo: 2, frequency: '1.22E-05', consequence: 'BOIL', resultCode: 'MU' },
       { key: 'S3', category: 'SEQUENCE', label: 'Sequence 3', sequenceNo: 3, frequency: '3.10E-06', consequence: 'FUEL-DMG', resultCode: 'LOPC' }
     ],
-    links: [
-      { from: 'IE', to: 'B1' },
-      { from: 'B1', to: 'B2', label: 'Success', outcome: 'SUCCESS' },
-      { from: 'B1', to: 'S3', label: 'Failure', outcome: 'FAILURE' },
-      { from: 'B2', to: 'S1', label: 'Success', outcome: 'SUCCESS' },
-      { from: 'B2', to: 'S2', label: 'Failure', outcome: 'FAILURE' }
-    ],
+    links: [],
     editedDate: '01/10/2026',
     editedBy: 'AR'
   }
