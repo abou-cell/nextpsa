@@ -9,6 +9,7 @@ import {
   Output,
   NgZone,
   SimpleChanges,
+  signal,
   ViewChild
 } from '@angular/core';
 import * as go from 'gojs';
@@ -38,12 +39,12 @@ interface EventTreeLayoutMetrics {
         <button type="button" [disabled]="model?.functionEvents?.length === 0" (click)="removeFunctionEvent.emit()">− Function Event</button>
         <button
           type="button"
-          [disabled]="!selectedBranchKey || selectedBranchCount >= 10"
+          [disabled]="!selectedBranchKey() || selectedBranchCount() >= 10"
           (click)="requestBranch()">+ Branch</button>
         <span class="hint">
           {{
-            selectedBranchKey
-              ? ('Selected node: ' + selectedBranchKey + ' · branches ' + selectedBranchCount + '/10')
+            selectedBranchKey()
+              ? ('Selected node: ' + selectedBranchKey() + ' · branches ' + selectedBranchCount() + '/10')
               : 'Select a Function Event node or branch node to add a branch'
           }}
         </span>
@@ -85,8 +86,8 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     event.stopImmediatePropagation();
     this.lockViewport();
   };
-  selectedBranchKey: string | null = null;
-  selectedBranchCount = 0;
+  readonly selectedBranchKey = signal<string | null>(null);
+  readonly selectedBranchCount = signal(0);
 
   constructor(private readonly ngZone: NgZone) {}
 
@@ -115,8 +116,9 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   }
 
   requestBranch(): void {
-    if (this.selectedBranchKey && this.selectedBranchCount < 10) {
-      this.addBranch.emit(this.selectedBranchKey);
+    const key = this.selectedBranchKey();
+    if (key && this.selectedBranchCount() < 10) {
+      this.addBranch.emit(key);
     }
   }
 
@@ -138,8 +140,8 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
   private selectBranchSource(key: string): void {
     this.ngZone.run(() => {
-      this.selectedBranchKey = key;
-      this.selectedBranchCount = this.countDirectBranches(key);
+      this.selectedBranchKey.set(key);
+      this.selectedBranchCount.set(this.countDirectBranches(key));
     });
   }
 
@@ -154,7 +156,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     // block always ends at the right edge. Resizing the browser only changes
     // the widths of IE/FE blocks between those two anchors.
     this.lockViewport();
-    this.selectedBranchCount = this.countDirectBranches(this.selectedBranchKey);
+    this.selectedBranchCount.set(this.countDirectBranches(this.selectedBranchKey()));
   }
 
   private measureLayout(): EventTreeLayoutMetrics {
@@ -230,8 +232,8 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         this.selectBranchSource(key);
       } else {
         this.ngZone.run(() => {
-          this.selectedBranchKey = null;
-          this.selectedBranchCount = 0;
+          this.selectedBranchKey.set(null);
+          this.selectedBranchCount.set(0);
         });
       }
     });
@@ -501,9 +503,33 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       });
     });
 
+    const branchColumnBySequence = new Map<string, number>();
+    this.model.links.forEach((link) => {
+      const branch = this.model.nodes.find(
+        (node) => node.key === link.from && node.category === 'BRANCH'
+      );
+      const sequence = this.model.nodes.find(
+        (node) => node.key === link.to && node.category === 'SEQUENCE'
+      );
+      if (branch && sequence) {
+        branchColumnBySequence.set(sequence.key, branch.columnIndex ?? 1);
+      }
+    });
+
     const sequenceNodes = [...this.model.nodes]
       .filter((node) => node.category === 'SEQUENCE')
-      .sort((a, b) => (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0));
+      .sort((a, b) => {
+        if ((a.sequenceNo ?? 0) === 1) return -1;
+        if ((b.sequenceNo ?? 0) === 1) return 1;
+
+        const columnA = branchColumnBySequence.get(a.key) ?? 0;
+        const columnB = branchColumnBySequence.get(b.key) ?? 0;
+
+        // Later Function Events occupy upper lanes; earlier FEs occupy lower lanes.
+        // This nesting prevents FE1 branch horizontals from crossing FE2/FE3 verticals.
+        if (columnA !== columnB) return columnB - columnA;
+        return (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0);
+      });
 
     // A brand-new ET has no branches: RiskSpectrum still shows one result line.
     const visibleSequences = sequenceNodes.length
