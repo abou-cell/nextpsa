@@ -79,6 +79,12 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
   private diagram?: go.Diagram;
   private resizeObserver?: ResizeObserver;
+  private readonly lockedWheelHandler = (event: WheelEvent): void => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    this.lockViewport();
+  };
   selectedBranchKey: string | null = null;
   selectedBranchCount = 0;
 
@@ -92,6 +98,10 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       requestAnimationFrame(() => this.refreshLayout());
     });
     this.resizeObserver.observe(this.diagramDiv.nativeElement);
+    this.diagramDiv.nativeElement.addEventListener('wheel', this.lockedWheelHandler, {
+      passive: false,
+      capture: true
+    });
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -100,6 +110,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
   ngOnDestroy(): void {
     this.resizeObserver?.disconnect();
+    this.diagramDiv.nativeElement.removeEventListener('wheel', this.lockedWheelHandler, true);
     if (this.diagram) this.diagram.div = null;
   }
 
@@ -116,7 +127,20 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   preventDiagramWheel(event: WheelEvent): void {
     event.preventDefault();
     event.stopPropagation();
-    if (this.diagram) this.diagram.position = new go.Point(0, 0);
+    this.lockViewport();
+  }
+
+  private lockViewport(): void {
+    if (!this.diagram) return;
+    this.diagram.scale = 1;
+    this.diagram.position = new go.Point(0, 0);
+  }
+
+  private selectBranchSource(key: string): void {
+    this.ngZone.run(() => {
+      this.selectedBranchKey = key;
+      this.selectedBranchCount = this.countDirectBranches(key);
+    });
   }
 
   refreshLayout(): void {
@@ -129,8 +153,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     // RiskSpectrum-style fixed anchors: IE always starts at x=0 and the result
     // block always ends at the right edge. Resizing the browser only changes
     // the widths of IE/FE blocks between those two anchors.
-    this.diagram.scale = 1;
-    this.diagram.position = new go.Point(0, 0);
+    this.lockViewport();
     this.selectedBranchCount = this.countDirectBranches(this.selectedBranchKey);
   }
 
@@ -186,17 +209,31 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     this.diagram.toolManager.panningTool.isEnabled = false;
     this.diagram.toolManager.mouseWheelBehavior = go.WheelMode.None;
 
+    this.diagram.addDiagramListener('ViewportBoundsChanged', () => {
+      if (!this.diagram) return;
+      if (this.diagram.scale !== 1 || !this.diagram.position.equals(new go.Point(0, 0))) {
+        this.diagram.scale = 1;
+        this.diagram.position = new go.Point(0, 0);
+      }
+    });
+
     this.diagram.addDiagramListener('ChangedSelection', () => {
       const node = this.diagram?.selection.first() as go.Node | null;
       const data = node?.data as { category?: string; key?: string } | undefined;
 
-      this.ngZone.run(() => {
-        this.selectedBranchKey =
-          data?.category === 'BRANCH' || data?.category === 'FE_POINT'
-            ? (data.key ?? null)
-            : null;
-        this.selectedBranchCount = this.countDirectBranches(this.selectedBranchKey);
-      });
+      const key =
+        data?.category === 'BRANCH' || data?.category === 'FE_POINT'
+          ? (data.key ?? null)
+          : null;
+
+      if (key) {
+        this.selectBranchSource(key);
+      } else {
+        this.ngZone.run(() => {
+          this.selectedBranchKey = null;
+          this.selectedBranchCount = 0;
+        });
+      }
     });
   }
 
@@ -304,6 +341,25 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       )
     );
 
+    this.diagram.nodeTemplateMap.add('ANCHOR',
+      $(go.Node, 'Spot',
+        {
+          selectable: false,
+          locationSpot: go.Spot.Center,
+          fromSpot: go.Spot.Center,
+          toSpot: go.Spot.Center
+        },
+        new go.Binding('location', 'loc', go.Point.parse),
+        $(go.Shape, 'Rectangle', {
+          width: 1,
+          height: 1,
+          fill: null,
+          stroke: null,
+          portId: ''
+        })
+      )
+    );
+
     this.diagram.nodeTemplateMap.add('FE_POINT',
       $(go.Node, 'Spot',
         {
@@ -311,7 +367,12 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           cursor: 'pointer',
           locationSpot: go.Spot.Center,
           fromSpot: go.Spot.Right,
-          toSpot: go.Spot.Left
+          toSpot: go.Spot.Left,
+          click: (_event: go.InputEvent, node: go.GraphObject) => {
+            const part = node.part as go.Node | null;
+            const key = part?.data?.key as string | undefined;
+            if (key) this.selectBranchSource(key);
+          }
         },
         new go.Binding('location', 'loc', go.Point.parse),
         $(go.Shape, 'Circle', {
@@ -332,7 +393,12 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           cursor: 'pointer',
           locationSpot: go.Spot.Center,
           fromSpot: go.Spot.Right,
-          toSpot: go.Spot.Left
+          toSpot: go.Spot.Left,
+          click: (_event: go.InputEvent, node: go.GraphObject) => {
+            const part = node.part as go.Node | null;
+            const key = part?.data?.key as string | undefined;
+            if (key) this.selectBranchSource(key);
+          }
         },
         new go.Binding('location', 'loc', go.Point.parse),
         $(go.Shape, 'Rectangle', {
@@ -466,8 +532,8 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     // every FE point and ending at Sequence 1. FE points stay selectable even
     // when no additional branch exists.
     const baselineNodes = [
-      { key: '__BASELINE_START__', category: 'BRANCH', loc: `0 ${baselineY}` },
-      { key: '__BASELINE_END__', category: 'BRANCH', loc: `${metrics.resultX} ${baselineY}` }
+      { key: '__BASELINE_START__', category: 'ANCHOR', loc: `0 ${baselineY}` },
+      { key: '__BASELINE_END__', category: 'ANCHOR', loc: `${metrics.resultX} ${baselineY}` }
     ];
     nodes.push(...baselineNodes);
 
