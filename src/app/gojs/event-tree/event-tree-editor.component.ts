@@ -39,7 +39,11 @@ interface EventTreeLayoutMetrics {
         <span class="hint">{{ selectedBranchKey ? ('Selected branch: ' + selectedBranchKey) : 'Select a branch node to add a branch' }}</span>
         <span class="status"><i></i> GoJS Event Tree</span>
       </div>
-      <div #diagramDiv class="diagram"></div>
+      <div
+        #diagramDiv
+        class="diagram"
+        (wheel)="preventDiagramWheel($event)">
+      </div>
     </section>
   `,
   styles: [`
@@ -92,6 +96,12 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
   fit(): void {
     this.diagram?.commandHandler.zoomToFit();
+  }
+
+  preventDiagramWheel(event: WheelEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (this.diagram) this.diagram.position = new go.Point(0, 0);
   }
 
   refreshLayout(): void {
@@ -151,18 +161,22 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       padding: 0,
       contentAlignment: go.Spot.TopLeft,
       initialContentAlignment: go.Spot.TopLeft,
-      scrollMode: go.ScrollMode.Infinite,
+      scrollMode: go.ScrollMode.Document,
       minScale: 0.25,
       maxScale: 2
     });
 
     this.diagram.toolManager.draggingTool.isEnabled = false;
     this.diagram.toolManager.panningTool.isEnabled = false;
+    this.diagram.toolManager.mouseWheelBehavior = go.WheelMode.None;
 
     this.diagram.addDiagramListener('ChangedSelection', () => {
       const node = this.diagram?.selection.first() as go.Node | null;
       const data = node?.data as { category?: string; key?: string } | undefined;
-      this.selectedBranchKey = data?.category === 'BRANCH' ? (data.key ?? null) : null;
+      this.selectedBranchKey =
+        data?.category === 'BRANCH' || data?.category === 'FE_POINT'
+          ? (data.key ?? null)
+          : null;
     });
   }
 
@@ -253,6 +267,27 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           $(go.TextBlock, 'Conseq.', { column: 2, margin: 4, alignment: go.Spot.BottomLeft, font: '10px Arial, sans-serif', stroke: '#111827' }),
           $(go.TextBlock, 'Code', { column: 3, margin: 4, alignment: go.Spot.BottomLeft, font: '10px Arial, sans-serif', stroke: '#111827' })
         )
+      )
+    );
+
+    this.diagram.nodeTemplateMap.add('FE_POINT',
+      $(go.Node, 'Spot',
+        {
+          selectionAdorned: true,
+          cursor: 'pointer',
+          locationSpot: go.Spot.Center,
+          fromSpot: go.Spot.Right,
+          toSpot: go.Spot.Left
+        },
+        new go.Binding('location', 'loc', go.Point.parse),
+        $(go.Shape, 'Circle', {
+          width: 8,
+          height: 8,
+          fill: '#ffffff',
+          stroke: '#334155',
+          strokeWidth: 1.2,
+          portId: ''
+        })
       )
     );
 
@@ -352,6 +387,20 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       loc: `${metrics.resultX} 0`
     });
 
+    const baselineY = metrics.headerHeight + metrics.sequenceRowHeight / 2;
+
+    // One selectable branch point is always available under each Function Event.
+    // These fixed points are the places where + Branch can be applied.
+    this.model.functionEvents.forEach((_event, index) => {
+      const column = index + 1;
+      const x = column * metrics.blockWidth + metrics.blockWidth / 2;
+      nodes.push({
+        key: `FEPOINT-${column}`,
+        category: 'FE_POINT',
+        loc: `${x} ${baselineY}`
+      });
+    });
+
     const sequenceNodes = [...this.model.nodes]
       .filter((node) => node.category === 'SEQUENCE')
       .sort((a, b) => (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0));
@@ -379,18 +428,28 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     const branchNodes = this.model.nodes.filter((node) => node.category === 'BRANCH');
 
-    if (!branchNodes.length) {
-      // New ET: one straight, non-deletable baseline from the fixed IE side
-      // to the fixed result table. Adding/removing FE only changes header widths.
-      const baselineY = metrics.headerHeight + metrics.sequenceRowHeight / 2;
-      nodes.push(
-        { key: '__BASELINE_START__', category: 'BRANCH', loc: `0 ${baselineY}` },
-        { key: '__BASELINE_END__', category: 'BRANCH', loc: `${metrics.resultX} ${baselineY}` }
-      );
+    // Permanent RiskSpectrum-style base sequence: one straight line crossing
+    // every FE point and ending at Sequence 1. FE points stay selectable even
+    // when no additional branch exists.
+    const baselineNodes = [
+      { key: '__BASELINE_START__', category: 'BRANCH', loc: `0 ${baselineY}` },
+      { key: '__BASELINE_END__', category: 'BRANCH', loc: `${metrics.resultX} ${baselineY}` }
+    ];
+    nodes.push(...baselineNodes);
 
-      this.diagram.model = new go.GraphLinksModel(nodes, [
-        { from: '__BASELINE_START__', to: '__BASELINE_END__' }
-      ]);
+    const baselineLinks: any[] = [];
+    let previousKey = '__BASELINE_START__';
+
+    this.model.functionEvents.forEach((_event, index) => {
+      const pointKey = `FEPOINT-${index + 1}`;
+      baselineLinks.push({ from: previousKey, to: pointKey });
+      previousKey = pointKey;
+    });
+
+    baselineLinks.push({ from: previousKey, to: '__BASELINE_END__' });
+
+    if (!branchNodes.length) {
+      this.diagram.model = new go.GraphLinksModel(nodes, baselineLinks);
       return;
     }
 
@@ -432,6 +491,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     });
 
     this.diagram.model = new go.GraphLinksModel(nodes, [
+      ...baselineLinks,
       { from: 'IE-ANCHOR', to: firstBranch.key },
       ...this.model.links
     ]);

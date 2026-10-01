@@ -16,8 +16,6 @@ const EVENT_TREES: EventTreeModel[] = [
       { key: 'FE1', category: 'FUNCTION', label: 'Emergency Core Cooling', code: 'V', columnIndex: 1 },
       { key: 'FE2', category: 'FUNCTION', label: 'Residual Heat Removal', code: 'W', columnIndex: 2 },
       { key: 'S1', category: 'SEQUENCE', label: 'Sequence 1', sequenceNo: 1, frequency: '1.00E-04', consequence: 'CD3,OK,TEST', resultCode: '' },
-      { key: 'S2', category: 'SEQUENCE', label: 'Sequence 2', sequenceNo: 2, frequency: '2.11E-09', consequence: 'CD,CD3', resultCode: 'W' },
-      { key: 'S3', category: 'SEQUENCE', label: 'Sequence 3', sequenceNo: 3, frequency: '3.55E-07', consequence: 'CD,CD2,RC1', resultCode: 'V' }
     ],
     links: [],
     editedDate: '01/10/2026',
@@ -37,8 +35,6 @@ const EVENT_TREES: EventTreeModel[] = [
       { key: 'FE1', category: 'FUNCTION', label: 'AC Power Recovery', code: 'ACR', columnIndex: 1 },
       { key: 'FE2', category: 'FUNCTION', label: 'Decay Heat Removal', code: 'DHR', columnIndex: 2 },
       { key: 'S1', category: 'SEQUENCE', label: 'Sequence 1', sequenceNo: 1, frequency: '4.20E-06', consequence: 'OK', resultCode: 'ACR' },
-      { key: 'S2', category: 'SEQUENCE', label: 'Sequence 2', sequenceNo: 2, frequency: '8.50E-08', consequence: 'CD1', resultCode: 'DHR' },
-      { key: 'S3', category: 'SEQUENCE', label: 'Sequence 3', sequenceNo: 3, frequency: '6.10E-07', consequence: 'CD2', resultCode: 'SBO' }
     ],
     links: [],
     editedDate: '01/10/2026',
@@ -58,8 +54,6 @@ const EVENT_TREES: EventTreeModel[] = [
       { key: 'FE1', category: 'FUNCTION', label: 'Make-up Available', code: 'MU', columnIndex: 1 },
       { key: 'FE2', category: 'FUNCTION', label: 'Cooling Recovery', code: 'REC', columnIndex: 2 },
       { key: 'S1', category: 'SEQUENCE', label: 'Sequence 1', sequenceNo: 1, frequency: '6.10E-04', consequence: 'SFP-OK', resultCode: 'REC' },
-      { key: 'S2', category: 'SEQUENCE', label: 'Sequence 2', sequenceNo: 2, frequency: '1.22E-05', consequence: 'BOIL', resultCode: 'MU' },
-      { key: 'S3', category: 'SEQUENCE', label: 'Sequence 3', sequenceNo: 3, frequency: '3.10E-06', consequence: 'FUEL-DMG', resultCode: 'LOPC' }
     ],
     links: [],
     editedDate: '01/10/2026',
@@ -137,12 +131,27 @@ export class EventTreeRepository {
 
       const sequenceCount = tree.nodes.filter((node) => node.category === 'SEQUENCE').length;
       const branchCount = tree.nodes.filter((node) => node.category === 'BRANCH').length;
-      const source = tree.nodes.find((node) => node.key === fromKey);
-      if (!source) return tree;
+
+      let columnIndex: number | null = null;
+      let sourceLevel = 0;
+
+      const functionPointMatch = /^FEPOINT-(\d+)$/.exec(fromKey);
+      if (functionPointMatch) {
+        columnIndex = Number(functionPointMatch[1]);
+      } else {
+        const source = tree.nodes.find((node) => node.key === fromKey && node.category === 'BRANCH');
+        if (source) {
+          columnIndex = source.columnIndex ?? 1;
+          sourceLevel = source.level ?? 0;
+        }
+      }
+
+      if (columnIndex === null || columnIndex < 1 || columnIndex > tree.functionEvents.length) {
+        return tree;
+      }
 
       const branchKey = `B${branchCount + 1}`;
       const sequenceKey = `S${sequenceCount + 1}`;
-      const columnIndex = Math.max(1, source.columnIndex ?? tree.functionEvents.length);
 
       return {
         ...tree,
@@ -153,7 +162,7 @@ export class EventTreeRepository {
             category: 'BRANCH' as const,
             label: `Branch ${branchCount + 1}`,
             columnIndex,
-            level: (source.level ?? 0) + 1
+            level: sourceLevel + 1
           },
           {
             key: sequenceKey,
@@ -167,7 +176,7 @@ export class EventTreeRepository {
         ],
         links: [
           ...tree.links,
-          { from: fromKey, to: branchKey, label: 'New branch', outcome: 'OTHER' as const },
+          { from: fromKey, to: branchKey, label: 'Branch', outcome: 'OTHER' as const },
           { from: branchKey, to: sequenceKey, label: 'Result', outcome: 'OTHER' as const }
         ]
       };
