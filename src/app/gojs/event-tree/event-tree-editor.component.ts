@@ -7,6 +7,7 @@ import {
   OnChanges,
   OnDestroy,
   Output,
+  NgZone,
   SimpleChanges,
   ViewChild
 } from '@angular/core';
@@ -80,6 +81,8 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private resizeObserver?: ResizeObserver;
   selectedBranchKey: string | null = null;
   selectedBranchCount = 0;
+
+  constructor(private readonly ngZone: NgZone) {}
 
   ngAfterViewInit(): void {
     this.createDiagram();
@@ -186,11 +189,14 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     this.diagram.addDiagramListener('ChangedSelection', () => {
       const node = this.diagram?.selection.first() as go.Node | null;
       const data = node?.data as { category?: string; key?: string } | undefined;
-      this.selectedBranchKey =
-        data?.category === 'BRANCH' || data?.category === 'FE_POINT'
-          ? (data.key ?? null)
-          : null;
-      this.selectedBranchCount = this.countDirectBranches(this.selectedBranchKey);
+
+      this.ngZone.run(() => {
+        this.selectedBranchKey =
+          data?.category === 'BRANCH' || data?.category === 'FE_POINT'
+            ? (data.key ?? null)
+            : null;
+        this.selectedBranchCount = this.countDirectBranches(this.selectedBranchKey);
+      });
     });
   }
 
