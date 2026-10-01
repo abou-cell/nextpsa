@@ -34,6 +34,12 @@ interface EventTreeLayoutMetrics {
   template: `
     <section class="et-shell">
       <div class="toolbar">
+        <button type="button" class="icon-button" title="Undo" aria-label="Undo" (click)="undo()">↶</button>
+        <button type="button" class="icon-button" title="Redo" aria-label="Redo" (click)="redo()">↷</button>
+        <span class="toolbar-separator" aria-hidden="true"></span>
+        <button type="button" class="icon-button" title="Zoom out" aria-label="Zoom out" (click)="zoomOut()">−</button>
+        <span class="zoom-value">{{ zoomPercent() }}%</span>
+        <button type="button" class="icon-button" title="Zoom in" aria-label="Zoom in" (click)="zoomIn()">+</button>
         <button type="button" (click)="fit()">Fit</button>
         <button type="button" (click)="addFunctionEvent.emit()">+ Function Event</button>
         <button type="button" [disabled]="model?.functionEvents?.length === 0" (click)="removeFunctionEvent.emit()">− Function Event</button>
@@ -64,6 +70,9 @@ interface EventTreeLayoutMetrics {
     .toolbar button { height:31px; padding:0 11px; border:1px solid var(--nps-border); border-radius:7px; background:#fff; color:var(--nps-text); font:inherit; font-size:10px; cursor:pointer; }
     .toolbar button:hover:not(:disabled) { background:#f3f7fb; border-color:#a9bfd7; }
     .toolbar button:disabled { opacity:.4; cursor:default; }
+    .toolbar .icon-button { width:31px; min-width:31px; padding:0; font-size:14px; font-weight:700; }
+    .toolbar-separator { width:1px; height:22px; background:#cbd5e1; margin:0 2px; }
+    .zoom-value { min-width:42px; text-align:center; color:#64748b; font-size:10px; font-variant-numeric:tabular-nums; }
     .hint { color:var(--nps-text-muted); font-size:9px; }
     .status { margin-left:auto; color:var(--nps-text-muted); font-size:9px; display:flex; align-items:center; gap:6px; }
     .status i { width:7px; height:7px; border-radius:50%; background:#22c55e; }
@@ -88,6 +97,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   };
   readonly selectedBranchKey = signal<string | null>(null);
   readonly selectedBranchCount = signal(0);
+  readonly zoomPercent = signal(100);
 
   constructor(private readonly ngZone: NgZone) {}
 
@@ -122,8 +132,27 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     }
   }
 
+  undo(): void {
+    this.diagram?.commandHandler.undo();
+  }
+
+  redo(): void {
+    this.diagram?.commandHandler.redo();
+  }
+
+  zoomOut(): void {
+    this.setZoom((this.diagram?.scale ?? 1) - 0.1);
+  }
+
+  zoomIn(): void {
+    this.setZoom((this.diagram?.scale ?? 1) + 0.1);
+  }
+
   fit(): void {
-    this.diagram?.commandHandler.zoomToFit();
+    if (!this.diagram) return;
+    this.diagram.commandHandler.zoomToFit();
+    this.diagram.position = new go.Point(0, 0);
+    this.updateZoomPercent();
   }
 
   preventDiagramWheel(event: WheelEvent): void {
@@ -134,8 +163,19 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
   private lockViewport(): void {
     if (!this.diagram) return;
-    this.diagram.scale = 1;
     this.diagram.position = new go.Point(0, 0);
+  }
+
+  private setZoom(scale: number): void {
+    if (!this.diagram) return;
+    const nextScale = Math.max(0.5, Math.min(2, Math.round(scale * 10) / 10));
+    this.diagram.scale = nextScale;
+    this.diagram.position = new go.Point(0, 0);
+    this.updateZoomPercent();
+  }
+
+  private updateZoomPercent(): void {
+    this.zoomPercent.set(Math.round((this.diagram?.scale ?? 1) * 100));
   }
 
   private selectBranchSource(key: string): void {
@@ -155,7 +195,11 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     // RiskSpectrum-style fixed anchors: IE always starts at x=0 and the result
     // block always ends at the right edge. Resizing the browser only changes
     // the widths of IE/FE blocks between those two anchors.
+    if (this.diagram.scale < 0.5 || this.diagram.scale > 2) {
+      this.diagram.scale = 1;
+    }
     this.lockViewport();
+    this.updateZoomPercent();
     this.selectedBranchCount.set(this.countDirectBranches(this.selectedBranchKey()));
   }
 
@@ -213,10 +257,10 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     this.diagram.addDiagramListener('ViewportBoundsChanged', () => {
       if (!this.diagram) return;
-      if (this.diagram.scale !== 1 || !this.diagram.position.equals(new go.Point(0, 0))) {
-        this.diagram.scale = 1;
+      if (!this.diagram.position.equals(new go.Point(0, 0))) {
         this.diagram.position = new go.Point(0, 0);
       }
+      this.ngZone.run(() => this.updateZoomPercent());
     });
 
     this.diagram.addDiagramListener('ChangedSelection', () => {
