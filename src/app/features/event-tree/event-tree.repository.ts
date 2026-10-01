@@ -129,8 +129,22 @@ export class EventTreeRepository {
     this.eventTrees.update((trees) => trees.map((tree) => {
       if (tree.id !== treeId) return tree;
 
+      const branchKeys = new Set(
+        tree.nodes
+          .filter((node) => node.category === 'BRANCH')
+          .map((node) => node.key)
+      );
+
+      // A maximum of 10 direct branches is allowed from each selectable node
+      // (FE point or an already-created branch node).
+      const directBranchCount = tree.links.filter(
+        (link) => link.from === fromKey && branchKeys.has(link.to)
+      ).length;
+
+      if (directBranchCount >= 10) return tree;
+
       const sequenceCount = tree.nodes.filter((node) => node.category === 'SEQUENCE').length;
-      const branchCount = tree.nodes.filter((node) => node.category === 'BRANCH').length;
+      const branchCount = branchKeys.size;
 
       let columnIndex: number | null = null;
       let sourceLevel = 0;
@@ -151,7 +165,8 @@ export class EventTreeRepository {
       }
 
       const branchKey = `B${branchCount + 1}`;
-      const sequenceKey = `S${sequenceCount + 1}`;
+      const sequenceNo = sequenceCount + 1;
+      const sequenceKey = `S${sequenceNo}`;
 
       return {
         ...tree,
@@ -160,23 +175,23 @@ export class EventTreeRepository {
           {
             key: branchKey,
             category: 'BRANCH' as const,
-            label: `Branch ${branchCount + 1}`,
+            label: `Branch ${directBranchCount + 1}`,
             columnIndex,
             level: sourceLevel + 1
           },
           {
             key: sequenceKey,
             category: 'SEQUENCE' as const,
-            label: `Sequence ${sequenceCount + 1}`,
-            sequenceNo: sequenceCount + 1,
-            frequency: '0.00E+00',
-            consequence: 'TBD',
+            label: `Sequence ${sequenceNo}`,
+            sequenceNo,
+            frequency: '',
+            consequence: '',
             resultCode: ''
           }
         ],
         links: [
           ...tree.links,
-          { from: fromKey, to: branchKey, label: 'Branch', outcome: 'OTHER' as const },
+          { from: fromKey, to: branchKey, label: `Branch ${directBranchCount + 1}`, outcome: 'OTHER' as const },
           { from: branchKey, to: sequenceKey, label: 'Result', outcome: 'OTHER' as const }
         ]
       };
