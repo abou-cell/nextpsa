@@ -148,6 +148,8 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       allowMove: false,
       allowCopy: false,
       allowDelete: false,
+      allowHorizontalScroll: false,
+      allowVerticalScroll: false,
       padding: 0,
       contentAlignment: go.Spot.TopLeft,
       initialContentAlignment: go.Spot.TopLeft,
@@ -155,6 +157,9 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       minScale: 0.25,
       maxScale: 2
     });
+
+    this.diagram.draggingTool.isEnabled = false;
+    this.diagram.panningTool.isEnabled = false;
 
     this.diagram.addDiagramListener('ChangedSelection', () => {
       const node = this.diagram?.selection.first() as go.Node | null;
