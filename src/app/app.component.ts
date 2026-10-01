@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { FaultTreeWorkspaceService } from './features/fault-tree/fault-tree-workspace.service';
@@ -46,6 +46,31 @@ interface NavGroup {
         <div class="top-actions">
           <button type="button" class="ghost">Save</button>
           <button type="button" class="run">▶ Run Analysis</button>
+          <div class="language-selector">
+            <button
+              type="button"
+              class="language-button"
+              [attr.aria-expanded]="languageMenuOpen()"
+              aria-haspopup="menu"
+              title="Choose language"
+              (click)="languageMenuOpen.set(!languageMenuOpen())">
+              {{ currentLanguage() }} <span>⌄</span>
+            </button>
+            <div *ngIf="languageMenuOpen()" class="language-menu" role="menu">
+              <button type="button" role="menuitem" [class.active]="currentLanguage() === 'EN'" (click)="selectLanguage('EN')">
+                <strong>EN</strong><span>English</span>
+              </button>
+              <button type="button" role="menuitem" [class.active]="currentLanguage() === 'FR'" (click)="selectLanguage('FR')">
+                <strong>FR</strong><span>Français</span>
+              </button>
+              <button type="button" role="menuitem" [class.active]="currentLanguage() === 'CH'" (click)="selectLanguage('CH')">
+                <strong>CH</strong><span>中文</span>
+              </button>
+              <button type="button" role="menuitem" [class.active]="currentLanguage() === 'AR'" (click)="selectLanguage('AR')">
+                <strong>AR</strong><span>العربية</span>
+              </button>
+            </div>
+          </div>
           <button type="button" class="avatar" title="PRA Engineer">AR</button>
         </div>
       </header>
@@ -100,6 +125,38 @@ interface NavGroup {
     .top-actions button { padding: 0 11px; cursor: pointer; font-size: 10px; }
     .top-actions .ghost { background: transparent; }
     .top-actions .run { background: var(--nps-blue); border-color: var(--nps-blue); color: #fff; font-weight: 700; }
+    .language-selector { position:relative; }
+    .top-actions .language-button { min-width:58px; display:flex; align-items:center; justify-content:center; gap:6px; background:#173454; font-weight:700; }
+    .language-button span { color:#9db7d2; font-size:9px; }
+    .language-menu {
+      position:absolute;
+      top:42px;
+      right:0;
+      width:156px;
+      padding:5px;
+      border:1px solid #315170;
+      border-radius:9px;
+      background:#102945;
+      box-shadow:0 12px 28px rgba(0,0,0,.28);
+      z-index:100;
+    }
+    .language-menu button {
+      width:100%;
+      height:32px;
+      display:grid;
+      grid-template-columns:30px 1fr;
+      align-items:center;
+      gap:7px;
+      padding:0 8px;
+      border:0;
+      border-radius:6px;
+      background:transparent;
+      color:#dceaff;
+      text-align:left;
+    }
+    .language-menu button:hover, .language-menu button.active { background:#1b3c61; }
+    .language-menu strong { font-size:10px; }
+    .language-menu span { color:#a9c3df; font-size:9px; }
     .top-actions .avatar { width: 36px; padding: 0; border-radius: 50%; background: #e0ecff; color: #173454; font-weight: 800; }
     .sidebar { grid-column: 1; grid-row: 2; min-height: 0; display: flex; flex-direction: column; background: var(--nps-sidebar); color: #dceaff; border-right: 1px solid #173454; }
     .sidebar nav { flex: 1; overflow: auto; padding: 12px 9px; }
@@ -122,10 +179,18 @@ interface NavGroup {
   `]
 })
 export class AppComponent {
+  readonly currentLanguage = signal<'EN' | 'FR' | 'CH' | 'AR'>('EN');
+  readonly languageMenuOpen = signal(false);
+
   constructor(
     private readonly router: Router,
     private readonly faultTreeWorkspaces: FaultTreeWorkspaceService
   ) {}
+
+  selectLanguage(language: 'EN' | 'FR' | 'CH' | 'AR'): void {
+    this.currentLanguage.set(language);
+    this.languageMenuOpen.set(false);
+  }
 
   isStandaloneRoute(): boolean {
     return this.router.url.startsWith('/standalone/');
