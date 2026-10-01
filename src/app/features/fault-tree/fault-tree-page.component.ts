@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, HostListener, ViewChild, computed, effect, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { BasicEventRecord, FaultTreeModel, FaultTreeNodeData, GateRecord } from '../../core/models/psa.models';
 import { MockPsaRepository } from '../../core/data/mock-psa.repository';
 import { FaultTreeEditorComponent } from '../../gojs/fault-tree/fault-tree-editor.component';
@@ -43,6 +44,13 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
             [disabled]="workspaceService.workspaces().length === 1"
             (click)="closeWorkspace($event, workspace.id)">×</button>
         </div>
+        <button
+          type="button"
+          class="event-tree-workspace-tab"
+          title="Open Event Tree Workspace"
+          (click)="openEventTreeWorkspace()">
+          Event Tree Workspace
+        </button>
         <div class="workspace-actions">
           <button type="button">Validate</button>
           <button type="button" class="primary">Save model</button>
@@ -280,6 +288,8 @@ import { FaultTreeWorkspaceService } from './fault-tree-workspace.service';
     .workspace-close { width: 28px; color: #7b8da1; font-size: 16px; }
     .workspace-close:hover:not(:disabled) { background: #fee2e2; color: #b91c1c; }
     .workspace-close:disabled { opacity: .25; cursor: default; }
+    .event-tree-workspace-tab { height:36px; min-width:150px; padding:0 12px; border:1px solid transparent; border-radius:7px 7px 0 0; background:transparent; color:var(--nps-text-muted); font:inherit; font-size:10px; text-align:left; cursor:pointer; flex:0 0 auto; }
+    .event-tree-workspace-tab:hover { background:#eaf2ff; color:var(--nps-blue); }
     .workspace-actions { margin-left: auto; display: flex; align-items: center; gap: 7px; padding: 0 6px 4px 12px; }
     .workspace-actions button { height: 31px; border: 1px solid var(--nps-border); border-radius: 8px; background: #fff; color: var(--nps-text); padding: 0 12px; font-size: 10px; cursor: pointer; }
     .workspace-actions button.primary { background: var(--nps-blue); color: #fff; border-color: var(--nps-blue); }
@@ -507,7 +517,8 @@ export class FaultTreePageComponent {
 
   constructor(
     readonly repository: MockPsaRepository,
-    readonly workspaceService: FaultTreeWorkspaceService
+    readonly workspaceService: FaultTreeWorkspaceService,
+    private readonly router: Router
   ) {
     effect(() => {
       const workspace = this.workspaceService.activeWorkspace();
@@ -888,6 +899,10 @@ export class FaultTreePageComponent {
 
   onEditorTagColorChange(color: string): void {
     this.tableTagColor.set(color);
+  }
+
+  openEventTreeWorkspace(): void {
+    void this.router.navigate(['/model/event-tree/ET-LOCA']);
   }
 
   activateWorkspace(id: number): void {
