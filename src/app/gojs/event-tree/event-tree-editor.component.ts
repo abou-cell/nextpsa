@@ -286,14 +286,8 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private countDirectBranches(sourceKey: string | null): number {
     if (!sourceKey || !this.model) return 0;
 
-    const branchKeys = new Set(
-      this.model.nodes
-        .filter((node) => node.category === 'BRANCH')
-        .map((node) => node.key)
-    );
-
     return this.model.links.filter(
-      (link) => link.from === sourceKey && branchKeys.has(link.to)
+      (link) => link.from === sourceKey && /^Branch\s\d+/.test(link.label ?? '')
     ).length;
   }
 
@@ -412,8 +406,8 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           selectionAdorned: true,
           cursor: 'pointer',
           locationSpot: go.Spot.Center,
-          fromSpot: go.Spot.Right,
-          toSpot: go.Spot.Left,
+          fromSpot: go.Spot.Center,
+          toSpot: go.Spot.Center,
           click: (_event: go.InputEvent, node: go.GraphObject) => {
             const part = node.part as go.Node | null;
             const key = part?.data?.key as string | undefined;
@@ -438,8 +432,8 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           selectionAdorned: true,
           cursor: 'pointer',
           locationSpot: go.Spot.Center,
-          fromSpot: go.Spot.Right,
-          toSpot: go.Spot.Left,
+          fromSpot: go.Spot.Center,
+          toSpot: go.Spot.Center,
           click: (_event: go.InputEvent, node: go.GraphObject) => {
             const part = node.part as go.Node | null;
             const key = part?.data?.key as string | undefined;
@@ -447,11 +441,12 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           }
         },
         new go.Binding('location', 'loc', go.Point.parse),
-        $(go.Shape, 'Rectangle', {
-          width: 12,
-          height: 12,
-          fill: 'rgba(255,255,255,0.01)',
-          stroke: null,
+        $(go.Shape, 'Circle', {
+          width: 8,
+          height: 8,
+          fill: '#ffffff',
+          stroke: '#334155',
+          strokeWidth: 1.2,
           portId: ''
         })
       )
@@ -556,7 +551,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         (node) => node.key === link.to && node.category === 'SEQUENCE'
       );
       if (branch && sequence) {
-        branchColumnBySequence.set(sequence.key, branch.columnIndex ?? 1);
+        branchColumnBySequence.set(sequence.key, branch.originColumnIndex ?? branch.columnIndex ?? 1);
       }
     });
 
