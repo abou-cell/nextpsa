@@ -35,8 +35,17 @@ interface EventTreeLayoutMetrics {
         <button type="button" (click)="fit()">Fit</button>
         <button type="button" (click)="addFunctionEvent.emit()">+ Function Event</button>
         <button type="button" [disabled]="model?.functionEvents?.length === 0" (click)="removeFunctionEvent.emit()">− Function Event</button>
-        <button type="button" [disabled]="!selectedBranchKey" (click)="requestBranch()">+ Branch</button>
-        <span class="hint">{{ selectedBranchKey ? ('Selected branch: ' + selectedBranchKey) : 'Select a branch node to add a branch' }}</span>
+        <button
+          type="button"
+          [disabled]="!selectedBranchKey || selectedBranchCount >= 10"
+          (click)="requestBranch()">+ Branch</button>
+        <span class="hint">
+          {{
+            selectedBranchKey
+              ? ('Selected node: ' + selectedBranchKey + ' · branches ' + selectedBranchCount + '/10')
+              : 'Select a Function Event node or branch node to add a branch'
+          }}
+        </span>
         <span class="status"><i></i> GoJS Event Tree</span>
       </div>
       <div
@@ -70,6 +79,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private diagram?: go.Diagram;
   private resizeObserver?: ResizeObserver;
   selectedBranchKey: string | null = null;
+  selectedBranchCount = 0;
 
   ngAfterViewInit(): void {
     this.createDiagram();
@@ -91,7 +101,9 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   }
 
   requestBranch(): void {
-    if (this.selectedBranchKey) this.addBranch.emit(this.selectedBranchKey);
+    if (this.selectedBranchKey && this.selectedBranchCount < 10) {
+      this.addBranch.emit(this.selectedBranchKey);
+    }
   }
 
   fit(): void {
@@ -116,6 +128,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     // the widths of IE/FE blocks between those two anchors.
     this.diagram.scale = 1;
     this.diagram.position = new go.Point(0, 0);
+    this.selectedBranchCount = this.countDirectBranches(this.selectedBranchKey);
   }
 
   private measureLayout(): EventTreeLayoutMetrics {
@@ -177,7 +190,22 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         data?.category === 'BRANCH' || data?.category === 'FE_POINT'
           ? (data.key ?? null)
           : null;
+      this.selectedBranchCount = this.countDirectBranches(this.selectedBranchKey);
     });
+  }
+
+  private countDirectBranches(sourceKey: string | null): number {
+    if (!sourceKey || !this.model) return 0;
+
+    const branchKeys = new Set(
+      this.model.nodes
+        .filter((node) => node.category === 'BRANCH')
+        .map((node) => node.key)
+    );
+
+    return this.model.links.filter(
+      (link) => link.from === sourceKey && branchKeys.has(link.to)
+    ).length;
   }
 
   private installTemplates(metrics: EventTreeLayoutMetrics): void {
@@ -482,17 +510,8 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       nodes.push({ ...node, loc: `${x} ${y}` });
     });
 
-    const firstBranch = branchNodes[0];
-    const firstY = getTargetY(firstBranch.key);
-    nodes.push({
-      key: 'IE-ANCHOR',
-      category: 'BRANCH',
-      loc: `0 ${firstY}`
-    });
-
     this.diagram.model = new go.GraphLinksModel(nodes, [
       ...baselineLinks,
-      { from: 'IE-ANCHOR', to: firstBranch.key },
       ...this.model.links
     ]);
   }
