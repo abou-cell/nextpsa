@@ -148,8 +148,6 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       allowMove: false,
       allowCopy: false,
       allowDelete: false,
-      allowHorizontalScroll: false,
-      allowVerticalScroll: false,
       padding: 0,
       contentAlignment: go.Spot.TopLeft,
       initialContentAlignment: go.Spot.TopLeft,
