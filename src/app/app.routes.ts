@@ -19,11 +19,7 @@ export const routes: Routes = [
   {
     path: 'model/event-tree/:id',
     loadComponent: () =>
-      import('./features/placeholder/feature-placeholder.component').then((m) => m.FeaturePlaceholderComponent),
-    data: {
-      title: 'Event Tree Workspace',
-      description: 'Phase 5 will implement the RiskSpectrum-style Initiating Event → Function Event → Branch Point → Sequence / Consequence editor with a dedicated GoJS layout.'
-    }
+      import('./features/event-tree/event-tree-page.component').then((m) => m.EventTreePageComponent)
   },
   {
     path: 'data/basic-events',
