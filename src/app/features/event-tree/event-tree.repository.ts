@@ -135,6 +135,28 @@ export class EventTreeRepository {
     }));
   }
 
+  removeFunctionEvent(treeId: string): void {
+    this.eventTrees.update((trees) => trees.map((tree) => {
+      if (tree.id !== treeId || !tree.functionEvents.length) return tree;
+
+      const nextFunctionEvents = tree.functionEvents.slice(0, -1);
+      const removedColumn = tree.functionEvents.length;
+      const maxColumn = Math.max(1, nextFunctionEvents.length);
+
+      return {
+        ...tree,
+        functionEvents: nextFunctionEvents,
+        nodes: tree.nodes
+          .filter((node) => !(node.category === 'FUNCTION' && node.columnIndex === removedColumn))
+          .map((node) =>
+            node.category === 'BRANCH' && (node.columnIndex ?? 1) > maxColumn
+              ? { ...node, columnIndex: maxColumn }
+              : node
+          )
+      };
+    }));
+  }
+
   addBranch(treeId: string, fromKey: string): void {
     this.eventTrees.update((trees) => trees.map((tree) => {
       if (tree.id !== treeId) return tree;
