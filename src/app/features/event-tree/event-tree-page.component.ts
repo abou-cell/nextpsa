@@ -34,6 +34,7 @@ import { EventTreeModel } from './event-tree.models';
             #eventTreeEditor
             [model]="repository.eventTree()"
             (addFunctionEvent)="addFunctionEvent()"
+            (removeFunctionEvent)="removeFunctionEvent()"
             (addBranch)="addBranch($event)">
           </app-event-tree-editor>
         </main>
@@ -137,17 +138,22 @@ export class EventTreePageComponent {
 
   selectEventTree(tree: EventTreeModel): void {
     this.repository.selectEventTree(tree.id);
-    requestAnimationFrame(() => this.eventTreeEditor?.fit());
+    requestAnimationFrame(() => this.eventTreeEditor?.refreshLayout());
   }
 
   addFunctionEvent(): void {
     this.repository.addFunctionEvent(this.repository.eventTree().id);
-    requestAnimationFrame(() => this.eventTreeEditor?.fit());
+    requestAnimationFrame(() => this.eventTreeEditor?.refreshLayout());
+  }
+
+  removeFunctionEvent(): void {
+    this.repository.removeFunctionEvent(this.repository.eventTree().id);
+    requestAnimationFrame(() => this.eventTreeEditor?.refreshLayout());
   }
 
   addBranch(fromKey: string): void {
     this.repository.addBranch(this.repository.eventTree().id, fromKey);
-    requestAnimationFrame(() => this.eventTreeEditor?.fit());
+    requestAnimationFrame(() => this.eventTreeEditor?.refreshLayout());
   }
 
   startBrowserResize(event: PointerEvent): void {
@@ -171,6 +177,6 @@ export class EventTreePageComponent {
   stopResize(): void {
     if (!this.isResizingBrowser) return;
     this.isResizingBrowser = false;
-    requestAnimationFrame(() => this.eventTreeEditor?.fit());
+    requestAnimationFrame(() => this.eventTreeEditor?.refreshLayout());
   }
 }
