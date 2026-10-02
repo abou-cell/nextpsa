@@ -448,7 +448,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           stroke: '#334155',
           strokeWidth: 1.2,
           portId: ''
-        }, new go.Binding('visible', 'hideMarker', (hide) => !hide))
+        })
       )
     );
 
@@ -647,9 +647,72 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       nodes.push({ ...node, loc: `${x} ${y}` });
     });
 
-    this.diagram.model = new go.GraphLinksModel(nodes, [
-      ...baselineLinks,
-      ...this.model.links
-    ]);
+    const renderedLinks: any[] = [...baselineLinks];
+
+    const branchNodeKeys = new Set(
+      this.model.nodes
+        .filter((node) => node.category === 'BRANCH')
+        .map((node) => node.key)
+    );
+
+    const sequenceKeys = new Set(
+      this.model.nodes
+        .filter((node) => node.category === 'SEQUENCE')
+        .map((node) => node.key)
+    );
+
+    const getNodeX = (key: string): number | null => {
+      const feMatch = /^FEPOINT-(\d+)$/.exec(key);
+      if (feMatch) {
+        const column = Number(feMatch[1]);
+        return column * metrics.blockWidth + metrics.blockWidth / 2;
+      }
+
+      const node = this.model.nodes.find((item) => item.key === key);
+      if (node?.category === 'BRANCH') {
+        const column = Math.max(1, Math.min(node.columnIndex ?? 1, this.model.functionEvents.length));
+        return column * metrics.blockWidth + metrics.blockWidth / 2;
+      }
+
+      return null;
+    };
+
+    this.model.links.forEach((link, index) => {
+      const isBranchStart = /^Branch\s\d+/.test(link.label ?? '');
+
+      if (!isBranchStart) {
+        renderedLinks.push(link);
+        return;
+      }
+
+      const sourceX = getNodeX(link.from);
+      const targetY = branchNodeKeys.has(link.to)
+        ? getTargetY(link.to)
+        : sequenceKeys.has(link.to)
+          ? (sequenceCenterY.get(link.to) ?? null)
+          : null;
+
+      if (sourceX === null || targetY === null) {
+        renderedLinks.push(link);
+        return;
+      }
+
+      // The lower corner is a pure routing bend, never a visible/selectable node.
+      // This guarantees exactly one visible node on the vertical branch: the
+      // selected FE/branch node where the split starts.
+      const bendKey = `__BEND-${index}-${link.from}-${link.to}`;
+      nodes.push({
+        key: bendKey,
+        category: 'ANCHOR',
+        loc: `${sourceX} ${targetY}`
+      });
+
+      renderedLinks.push(
+        { from: link.from, to: bendKey },
+        { from: bendKey, to: link.to }
+      );
+    });
+
+    this.diagram.model = new go.GraphLinksModel(nodes, renderedLinks);
   }
 }
