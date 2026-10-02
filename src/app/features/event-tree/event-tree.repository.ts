@@ -161,30 +161,27 @@ export class EventTreeRepository {
 
       const branchNodes = [];
       const branchLinks = [];
-
       let previousKey = fromKey;
 
-      // A new branch creates a complete horizontal path through every following
-      // Function Event. Each generated FE intersection is a selectable node.
-      for (let column = columnIndex; column <= tree.functionEvents.length; column += 1) {
+      // The selected node is the only visible node on the branch vertical.
+      // Do NOT create another node at the lower bend. For each following FE,
+      // create exactly one visible node on the new horizontal branch line.
+      for (let column = columnIndex + 1; column <= tree.functionEvents.length; column += 1) {
         const branchKey = `${branchGroup}-C${column}`;
 
         branchNodes.push({
           key: branchKey,
           category: 'BRANCH' as const,
-          label: column === columnIndex
-            ? `Branch ${directBranchCount + 1}`
-            : `FE ${column} branch point`,
+          label: `FE ${column} branch point`,
           columnIndex: column,
           originColumnIndex: columnIndex,
-          hideMarker: column === columnIndex,
           level: sourceLevel + 1
         });
 
         branchLinks.push({
           from: previousKey,
           to: branchKey,
-          label: column === columnIndex
+          label: previousKey === fromKey
             ? `Branch ${directBranchCount + 1}`
             : 'Continue',
           outcome: 'OTHER' as const
@@ -193,10 +190,14 @@ export class EventTreeRepository {
         previousKey = branchKey;
       }
 
+      // If the selected node belongs to the last FE, the branch goes directly
+      // to the new sequence. Otherwise the last following-FE node goes to it.
       branchLinks.push({
         from: previousKey,
         to: sequenceKey,
-        label: 'Result',
+        label: previousKey === fromKey
+          ? `Branch ${directBranchCount + 1}`
+          : 'Result',
         outcome: 'OTHER' as const
       });
 
