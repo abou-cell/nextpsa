@@ -157,53 +157,20 @@ export class EventTreeRepository {
 
       const sequenceNo = sequenceCount + 1;
       const sequenceKey = `S${sequenceNo}`;
-      const branchGroup = `B${sequenceNo}`;
-
-      const branchNodes = [];
-      const branchLinks = [];
-
-      let previousKey = fromKey;
-
-      // A new branch creates a complete horizontal path through every following
-      // Function Event. Each generated FE intersection is a selectable node.
-      for (let column = columnIndex; column <= tree.functionEvents.length; column += 1) {
-        const branchKey = `${branchGroup}-C${column}`;
-
-        branchNodes.push({
-          key: branchKey,
-          category: 'BRANCH' as const,
-          label: column === columnIndex
-            ? `Branch ${directBranchCount + 1}`
-            : `FE ${column} branch point`,
-          columnIndex: column,
-          originColumnIndex: columnIndex,
-          level: sourceLevel + 1
-        });
-
-        branchLinks.push({
-          from: previousKey,
-          to: branchKey,
-          label: column === columnIndex
-            ? `Branch ${directBranchCount + 1}`
-            : 'Continue',
-          outcome: 'OTHER' as const
-        });
-
-        previousKey = branchKey;
-      }
-
-      branchLinks.push({
-        from: previousKey,
-        to: sequenceKey,
-        label: 'Result',
-        outcome: 'OTHER' as const
-      });
+      const branchKey = `B${sequenceNo}`;
 
       return {
         ...tree,
         nodes: [
           ...tree.nodes,
-          ...branchNodes,
+          {
+            key: branchKey,
+            category: 'BRANCH' as const,
+            label: `Branch ${directBranchCount + 1}`,
+            columnIndex,
+            originColumnIndex: columnIndex,
+            level: sourceLevel + 1
+          },
           {
             key: sequenceKey,
             category: 'SEQUENCE' as const,
@@ -216,7 +183,18 @@ export class EventTreeRepository {
         ],
         links: [
           ...tree.links,
-          ...branchLinks
+          {
+            from: fromKey,
+            to: branchKey,
+            label: `Branch ${directBranchCount + 1}`,
+            outcome: 'OTHER' as const
+          },
+          {
+            from: branchKey,
+            to: sequenceKey,
+            label: 'Result',
+            outcome: 'OTHER' as const
+          }
         ]
       };
     }));
