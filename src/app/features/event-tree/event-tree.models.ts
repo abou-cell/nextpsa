@@ -7,6 +7,9 @@ export interface EventTreeNodeData {
   code?: string;
   columnIndex?: number;
   originColumnIndex?: number;
+  pathSequenceKey?: string;
+  parentSequenceKey?: string;
+  branchColumnIndex?: number;
   level?: number;
   sequenceNo?: number;
   frequency?: string;
