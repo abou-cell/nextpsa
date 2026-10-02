@@ -488,6 +488,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       $(go.Link,
         {
           routing: go.Routing.Orthogonal,
+          adjusting: go.Link.None,
           corner: 0,
           selectable: false,
           fromShortLength: 0,
@@ -542,33 +543,9 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       });
     });
 
-    const branchColumnBySequence = new Map<string, number>();
-    this.model.links.forEach((link) => {
-      const branch = this.model.nodes.find(
-        (node) => node.key === link.from && node.category === 'BRANCH'
-      );
-      const sequence = this.model.nodes.find(
-        (node) => node.key === link.to && node.category === 'SEQUENCE'
-      );
-      if (branch && sequence) {
-        branchColumnBySequence.set(sequence.key, branch.originColumnIndex ?? branch.columnIndex ?? 1);
-      }
-    });
-
     const sequenceNodes = [...this.model.nodes]
       .filter((node) => node.category === 'SEQUENCE')
-      .sort((a, b) => {
-        if ((a.sequenceNo ?? 0) === 1) return -1;
-        if ((b.sequenceNo ?? 0) === 1) return 1;
-
-        const columnA = branchColumnBySequence.get(a.key) ?? 0;
-        const columnB = branchColumnBySequence.get(b.key) ?? 0;
-
-        // Later Function Events occupy upper lanes; earlier FEs occupy lower lanes.
-        // This nesting prevents FE1 branch horizontals from crossing FE2/FE3 verticals.
-        if (columnA !== columnB) return columnB - columnA;
-        return (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0);
-      });
+      .sort((a, b) => (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0));
 
     // A brand-new ET has no branches: RiskSpectrum still shows one result line.
     const visibleSequences = sequenceNodes.length
@@ -618,32 +595,28 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       return;
     }
 
-    const outgoing = new Map<string, string[]>();
+    const sequenceByBranch = new Map<string, string>();
     this.model.links.forEach((link) => {
-      const list = outgoing.get(link.from) ?? [];
-      list.push(link.to);
-      outgoing.set(link.from, list);
+      const branch = this.model.nodes.find(
+        (node) => node.key === link.from && node.category === 'BRANCH'
+      );
+      const sequence = this.model.nodes.find(
+        (node) => node.key === link.to && node.category === 'SEQUENCE'
+      );
+      if (branch && sequence) sequenceByBranch.set(branch.key, sequence.key);
     });
-
-    const yMemo = new Map<string, number>();
-    const getTargetY = (key: string, depth = 0): number => {
-      if (depth > 20) return metrics.headerHeight + 50;
-      if (sequenceCenterY.has(key)) return sequenceCenterY.get(key)!;
-      if (yMemo.has(key)) return yMemo.get(key)!;
-
-      const targets = outgoing.get(key) ?? [];
-      if (!targets.length) return metrics.headerHeight + 50;
-      const ys = targets.map((target) => getTargetY(target, depth + 1));
-      const y = ys.reduce((sum, value) => sum + value, 0) / ys.length;
-      yMemo.set(key, y);
-      return y;
-    };
 
     branchNodes.forEach((node: EventTreeNodeData) => {
       const maxColumn = Math.max(1, this.model.functionEvents.length);
       const column = Math.max(1, Math.min(node.columnIndex ?? 1, maxColumn));
       const x = column * metrics.blockWidth + metrics.blockWidth / 2;
-      const y = getTargetY(node.key);
+      const sequenceKey = sequenceByBranch.get(node.key);
+      const y = sequenceKey
+        ? (sequenceCenterY.get(sequenceKey) ?? baselineY)
+        : baselineY;
+
+      // One branch node only. It sits exactly on the center line of its
+      // sequence row so the outgoing branch is straight and horizontal.
       nodes.push({ ...node, loc: `${x} ${y}` });
     });
 
