@@ -192,9 +192,6 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     this.installTemplates(metrics);
     this.applyModel(metrics);
 
-    // RiskSpectrum-style fixed anchors: IE always starts at x=0 and the result
-    // block always ends at the right edge. Resizing the browser only changes
-    // the widths of IE/FE blocks between those two anchors.
     if (this.diagram.scale < 0.5 || this.diagram.scale > 2) {
       this.diagram.scale = 1;
     }
@@ -206,15 +203,10 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private measureLayout(): EventTreeLayoutMetrics {
     const width = Math.max(720, this.diagramDiv.nativeElement.clientWidth || 720);
     const headerHeight = 82;
-
-    // Keep the result table anchored to the right. Its width follows the
-    // viewport modestly, while the IE/FE family consumes all remaining space.
     const resultWidth = Math.round(Math.max(330, Math.min(520, width * 0.38)));
     const resultX = width - resultWidth;
-
     const blockCount = Math.max(1, this.model.functionEvents.length + 1);
     const blockWidth = resultX / blockCount;
-
     const resultNoWidth = Math.round(resultWidth * 0.09);
     const resultFreqWidth = Math.round(resultWidth * 0.22);
     const resultConseqWidth = Math.round(resultWidth * 0.45);
@@ -266,7 +258,6 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     this.diagram.addDiagramListener('ChangedSelection', () => {
       const node = this.diagram?.selection.first() as go.Node | null;
       const data = node?.data as { category?: string; key?: string } | undefined;
-
       const key =
         data?.category === 'BRANCH' || data?.category === 'FE_POINT'
           ? (data.key ?? null)
@@ -285,7 +276,6 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
   private countDirectBranches(sourceKey: string | null): number {
     if (!sourceKey || !this.model) return 0;
-
     return this.model.links.filter(
       (link) => link.from === sourceKey && /^Branch\s\d+/.test(link.label ?? '')
     ).length;
@@ -294,56 +284,33 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   private installTemplates(metrics: EventTreeLayoutMetrics): void {
     if (!this.diagram) return;
     const $ = go.GraphObject.make;
-
     this.diagram.nodeTemplateMap.clear();
 
     this.diagram.nodeTemplateMap.add('HEADER',
       $(go.Node, 'Auto',
-        {
-          selectable: false,
-          locationSpot: go.Spot.TopLeft,
-          layerName: 'Background'
-        },
+        { selectable: false, locationSpot: go.Spot.TopLeft, layerName: 'Background' },
         new go.Binding('location', 'loc', go.Point.parse),
         $(go.Shape, 'Rectangle', {
-          fill: '#ffffff',
-          stroke: '#4b5563',
-          strokeWidth: 1,
+          fill: '#ffffff', stroke: '#4b5563', strokeWidth: 1,
           desiredSize: new go.Size(metrics.blockWidth, metrics.headerHeight)
         }, new go.Binding('fill', 'initiating', (v) => v ? '#d8d8d8' : '#ffffff')),
         $(go.Panel, 'Table',
-          {
-            width: metrics.blockWidth,
-            height: metrics.headerHeight,
-            defaultAlignment: go.Spot.Left
-          },
+          { width: metrics.blockWidth, height: metrics.headerHeight, defaultAlignment: go.Spot.Left },
           $(go.RowColumnDefinition, { row: 0, height: 60 }),
           $(go.RowColumnDefinition, { row: 1, height: 22 }),
           $(go.TextBlock, {
-            row: 0,
-            margin: new go.Margin(4, 5, 2, 5),
-            width: Math.max(20, metrics.blockWidth - 10),
-            verticalAlignment: go.Spot.Top,
-            font: '10px Arial, sans-serif',
-            wrap: go.Wrap.Fit,
-            overflow: go.TextOverflow.Ellipsis,
-            stroke: '#111827'
+            row: 0, margin: new go.Margin(4, 5, 2, 5),
+            width: Math.max(20, metrics.blockWidth - 10), verticalAlignment: go.Spot.Top,
+            font: '10px Arial, sans-serif', wrap: go.Wrap.Fit,
+            overflow: go.TextOverflow.Ellipsis, stroke: '#111827'
           }, new go.Binding('text', 'label')),
           $(go.Shape, 'LineH', {
-            row: 1,
-            alignment: go.Spot.Top,
-            stretch: go.Stretch.Horizontal,
-            stroke: '#6b7280',
-            strokeWidth: 1
+            row: 1, alignment: go.Spot.Top, stretch: go.Stretch.Horizontal,
+            stroke: '#6b7280', strokeWidth: 1
           }),
           $(go.TextBlock, {
-            row: 1,
-            margin: new go.Margin(2, 4, 2, 4),
-            width: Math.max(20, metrics.blockWidth - 8),
-            textAlign: 'center',
-            alignment: go.Spot.Center,
-            font: '10px Arial, sans-serif',
-            stroke: '#1f2937'
+            row: 1, margin: new go.Margin(2, 4, 2, 4), width: Math.max(20, metrics.blockWidth - 8),
+            textAlign: 'center', alignment: go.Spot.Center, font: '10px Arial, sans-serif', stroke: '#1f2937'
           }, new go.Binding('text', 'code'))
         )
       )
@@ -351,24 +318,14 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     this.diagram.nodeTemplateMap.add('RESULT_HEADER',
       $(go.Node, 'Auto',
-        {
-          selectable: false,
-          locationSpot: go.Spot.TopLeft,
-          layerName: 'Background'
-        },
+        { selectable: false, locationSpot: go.Spot.TopLeft, layerName: 'Background' },
         new go.Binding('location', 'loc', go.Point.parse),
         $(go.Shape, 'Rectangle', {
-          fill: '#ffffff',
-          stroke: '#4b5563',
-          strokeWidth: 1,
+          fill: '#ffffff', stroke: '#4b5563', strokeWidth: 1,
           desiredSize: new go.Size(metrics.resultWidth, metrics.headerHeight)
         }),
         $(go.Panel, 'Table',
-          {
-            width: metrics.resultWidth,
-            height: metrics.headerHeight,
-            defaultAlignment: go.Spot.Left
-          },
+          { width: metrics.resultWidth, height: metrics.headerHeight, defaultAlignment: go.Spot.Left },
           $(go.RowColumnDefinition, { column: 0, width: metrics.resultNoWidth }),
           $(go.RowColumnDefinition, { column: 1, width: metrics.resultFreqWidth }),
           $(go.RowColumnDefinition, { column: 2, width: metrics.resultConseqWidth }),
@@ -383,31 +340,17 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     this.diagram.nodeTemplateMap.add('ANCHOR',
       $(go.Node, 'Spot',
-        {
-          selectable: false,
-          locationSpot: go.Spot.Center,
-          fromSpot: go.Spot.Center,
-          toSpot: go.Spot.Center
-        },
+        { selectable: false, locationSpot: go.Spot.Center, fromSpot: go.Spot.Center, toSpot: go.Spot.Center },
         new go.Binding('location', 'loc', go.Point.parse),
-        $(go.Shape, 'Rectangle', {
-          width: 1,
-          height: 1,
-          fill: null,
-          stroke: null,
-          portId: ''
-        })
+        $(go.Shape, 'Rectangle', { width: 1, height: 1, fill: null, stroke: null, portId: '' })
       )
     );
 
     this.diagram.nodeTemplateMap.add('FE_POINT',
       $(go.Node, 'Spot',
         {
-          selectionAdorned: true,
-          cursor: 'pointer',
-          locationSpot: go.Spot.Center,
-          fromSpot: go.Spot.Center,
-          toSpot: go.Spot.Center,
+          selectionAdorned: true, cursor: 'pointer', locationSpot: go.Spot.Center,
+          fromSpot: go.Spot.Center, toSpot: go.Spot.Center,
           click: (_event: go.InputEvent, node: go.GraphObject) => {
             const part = node.part as go.Node | null;
             const key = part?.data?.key as string | undefined;
@@ -416,24 +359,16 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         },
         new go.Binding('location', 'loc', go.Point.parse),
         $(go.Shape, 'Circle', {
-          width: 8,
-          height: 8,
-          fill: '#ffffff',
-          stroke: '#334155',
-          strokeWidth: 1.2,
-          portId: ''
-        }, new go.Binding('visible', 'hideMarker', (hide) => !hide))
+          width: 8, height: 8, fill: '#ffffff', stroke: '#334155', strokeWidth: 1.2, portId: ''
+        })
       )
     );
 
     this.diagram.nodeTemplateMap.add('BRANCH',
       $(go.Node, 'Spot',
         {
-          selectionAdorned: true,
-          cursor: 'pointer',
-          locationSpot: go.Spot.Center,
-          fromSpot: go.Spot.Center,
-          toSpot: go.Spot.Center,
+          selectionAdorned: true, cursor: 'pointer', locationSpot: go.Spot.Center,
+          fromSpot: go.Spot.Center, toSpot: go.Spot.Center,
           click: (_event: go.InputEvent, node: go.GraphObject) => {
             const part = node.part as go.Node | null;
             const key = part?.data?.key as string | undefined;
@@ -442,36 +377,21 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         },
         new go.Binding('location', 'loc', go.Point.parse),
         $(go.Shape, 'Circle', {
-          width: 8,
-          height: 8,
-          fill: '#ffffff',
-          stroke: '#334155',
-          strokeWidth: 1.2,
-          portId: ''
+          width: 8, height: 8, fill: '#ffffff', stroke: '#334155', strokeWidth: 1.2, portId: ''
         })
       )
     );
 
     this.diagram.nodeTemplateMap.add('SEQUENCE',
       $(go.Node, 'Auto',
-        {
-          selectable: false,
-          locationSpot: go.Spot.TopLeft,
-          toSpot: go.Spot.Left
-        },
+        { selectable: false, locationSpot: go.Spot.TopLeft, toSpot: go.Spot.Left },
         new go.Binding('location', 'loc', go.Point.parse),
         $(go.Shape, 'Rectangle', {
-          fill: '#fff',
-          stroke: '#cbd5e1',
-          strokeWidth: 1,
+          fill: '#fff', stroke: '#cbd5e1', strokeWidth: 1,
           desiredSize: new go.Size(metrics.resultWidth, metrics.sequenceRowHeight)
         }),
         $(go.Panel, 'Table',
-          {
-            width: metrics.resultWidth,
-            height: metrics.sequenceRowHeight,
-            defaultAlignment: go.Spot.Left
-          },
+          { width: metrics.resultWidth, height: metrics.sequenceRowHeight, defaultAlignment: go.Spot.Left },
           $(go.RowColumnDefinition, { column: 0, width: metrics.resultNoWidth }),
           $(go.RowColumnDefinition, { column: 1, width: metrics.resultFreqWidth }),
           $(go.RowColumnDefinition, { column: 2, width: metrics.resultConseqWidth }),
@@ -487,7 +407,8 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     this.diagram.linkTemplate =
       $(go.Link,
         {
-          routing: go.Routing.Orthogonal,
+          routing: go.Routing.Normal,
+          curve: go.Curve.None,
           corner: 0,
           selectable: false,
           fromShortLength: 0,
@@ -502,44 +423,26 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     const nodes: any[] = [
       {
-        key: 'HDR-IE',
-        category: 'HEADER',
-        label: this.model.initiatingEvent,
-        code: this.model.initiatingCode,
-        initiating: true,
-        loc: '0 0'
+        key: 'HDR-IE', category: 'HEADER', label: this.model.initiatingEvent,
+        code: this.model.initiatingCode, initiating: true, loc: '0 0'
       }
     ];
 
     this.model.functionEvents.forEach((event, index) => {
       nodes.push({
-        key: `HDR-${event.id}`,
-        category: 'HEADER',
-        label: event.description,
-        code: event.code,
-        initiating: false,
-        loc: `${(index + 1) * metrics.blockWidth} 0`
+        key: `HDR-${event.id}`, category: 'HEADER', label: event.description,
+        code: event.code, initiating: false, loc: `${(index + 1) * metrics.blockWidth} 0`
       });
     });
 
-    nodes.push({
-      key: 'RESULT-HEADER',
-      category: 'RESULT_HEADER',
-      loc: `${metrics.resultX} 0`
-    });
+    nodes.push({ key: 'RESULT-HEADER', category: 'RESULT_HEADER', loc: `${metrics.resultX} 0` });
 
     const baselineY = metrics.headerHeight + metrics.sequenceRowHeight / 2;
 
-    // One selectable branch point is always available under each Function Event.
-    // These fixed points are the places where + Branch can be applied.
     this.model.functionEvents.forEach((_event, index) => {
       const column = index + 1;
       const x = column * metrics.blockWidth + metrics.blockWidth / 2;
-      nodes.push({
-        key: `FEPOINT-${column}`,
-        category: 'FE_POINT',
-        loc: `${x} ${baselineY}`
-      });
+      nodes.push({ key: `FEPOINT-${column}`, category: 'FE_POINT', loc: `${x} ${baselineY}` });
     });
 
     const allSequences = this.model.nodes.filter((node) => node.category === 'SEQUENCE');
@@ -572,17 +475,11 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       .sort((a, b) => (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0))
       .forEach(visitSequence);
 
-    // A brand-new ET has no branches: RiskSpectrum still shows one result line.
     const visibleSequences = sequenceNodes.length
       ? sequenceNodes
       : [{
-          key: '__NEW_SEQUENCE__',
-          category: 'SEQUENCE' as const,
-          label: 'Sequence 1',
-          sequenceNo: 1,
-          frequency: '',
-          consequence: '',
-          resultCode: ''
+          key: '__NEW_SEQUENCE__', category: 'SEQUENCE' as const, label: 'Sequence 1',
+          sequenceNo: 1, frequency: '', consequence: '', resultCode: ''
         }];
 
     const sequenceCenterY = new Map<string, number>();
@@ -595,9 +492,6 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     const branchNodes = this.model.nodes.filter((node) => node.category === 'BRANCH');
 
-    // Permanent RiskSpectrum-style base sequence: one straight line crossing
-    // every FE point and ending at Sequence 1. FE points stay selectable even
-    // when no additional branch exists.
     const baselineNodes = [
       { key: '__BASELINE_START__', category: 'ANCHOR', loc: `0 ${baselineY}` },
       { key: '__BASELINE_END__', category: 'ANCHOR', loc: `${metrics.resultX} ${baselineY}` }
@@ -612,7 +506,6 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       baselineLinks.push({ from: previousKey, to: pointKey });
       previousKey = pointKey;
     });
-
     baselineLinks.push({ from: previousKey, to: '__BASELINE_END__' });
 
     if (!branchNodes.length) {
@@ -661,15 +554,10 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const renderedLinks: any[] = [...baselineLinks];
 
     const branchNodeKeys = new Set(
-      this.model.nodes
-        .filter((node) => node.category === 'BRANCH')
-        .map((node) => node.key)
+      this.model.nodes.filter((node) => node.category === 'BRANCH').map((node) => node.key)
     );
-
     const sequenceKeys = new Set(
-      this.model.nodes
-        .filter((node) => node.category === 'SEQUENCE')
-        .map((node) => node.key)
+      this.model.nodes.filter((node) => node.category === 'SEQUENCE').map((node) => node.key)
     );
 
     const getNodeX = (key: string): number | null => {
@@ -684,7 +572,6 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         const column = Math.max(1, Math.min(node.columnIndex ?? 1, this.model.functionEvents.length));
         return column * metrics.blockWidth + metrics.blockWidth / 2;
       }
-
       return null;
     };
 
@@ -708,16 +595,8 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         return;
       }
 
-      // The lower corner is a pure routing bend, never a visible/selectable node.
-      // This guarantees exactly one visible node on the vertical branch: the
-      // selected FE/branch node where the split starts.
       const bendKey = `__BEND-${index}-${link.from}-${link.to}`;
-      nodes.push({
-        key: bendKey,
-        category: 'ANCHOR',
-        loc: `${sourceX} ${targetY}`
-      });
-
+      nodes.push({ key: bendKey, category: 'ANCHOR', loc: `${sourceX} ${targetY}` });
       renderedLinks.push(
         { from: link.from, to: bendKey },
         { from: bendKey, to: link.to }
