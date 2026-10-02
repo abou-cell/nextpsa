@@ -184,6 +184,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     this.ngZone.run(() => {
       this.selectedBranchKey.set(key);
       this.selectedBranchCount.set(this.countDirectBranches(key));
+      this.updateDotVisuals();
     });
   }
 
@@ -195,12 +196,30 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     dot.height = size;
   }
 
+  private updateDotVisuals(): void {
+    if (!this.diagram) return;
+    const selectedKey = this.selectedBranchKey();
+
+    this.diagram.nodes.each((node) => {
+      const data = node.data as { category?: string; key?: string } | undefined;
+      if (data?.category !== 'FE_POINT' && data?.category !== 'BRANCH') return;
+
+      const dot = node.findObject('DOT') as go.Shape | null;
+      if (!dot) return;
+
+      const size = data.key === selectedKey ? 8 : 5;
+      dot.width = size;
+      dot.height = size;
+    });
+  }
+
   refreshLayout(): void {
     if (!this.diagram || !this.model) return;
 
     const metrics = this.measureLayout();
     this.installTemplates(metrics);
     this.applyModel(metrics);
+    this.updateDotVisuals();
 
     if (this.diagram.scale < 0.5 || this.diagram.scale > 2) this.diagram.scale = 1;
     this.lockViewport();
@@ -272,6 +291,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
         this.ngZone.run(() => {
           this.selectedBranchKey.set(null);
           this.selectedBranchCount.set(0);
+          this.updateDotVisuals();
         });
       }
     });
@@ -354,11 +374,17 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       fromSpot: go.Spot.Center,
       toSpot: go.Spot.Center,
       mouseEnter: (_event: go.InputEvent, node: go.GraphObject) => this.resizeDot(node, 8),
-      mouseLeave: (_event: go.InputEvent, node: go.GraphObject) => this.resizeDot(node, 5),
+      mouseLeave: (_event: go.InputEvent, node: go.GraphObject) => {
+        const part = node.part as go.Node | null;
+        const key = part?.data?.key as string | undefined;
+        this.resizeDot(node, key && key === this.selectedBranchKey() ? 8 : 5);
+      },
       click: (_event: go.InputEvent, node: go.GraphObject) => {
         const part = node.part as go.Node | null;
         const key = part?.data?.key as string | undefined;
-        if (key) this.selectBranchSource(key);
+        if (!key || !part) return;
+        part.isSelected = true;
+        this.selectBranchSource(key);
       }
     };
 
