@@ -34,8 +34,8 @@ interface EventTreeLayoutMetrics {
   template: `
     <section class="et-shell">
       <div class="toolbar">
-        <button type="button" class="icon-button" title="Undo" aria-label="Undo" (click)="undo()">↶</button>
-        <button type="button" class="icon-button" title="Redo" aria-label="Redo" (click)="redo()">↷</button>
+        <button type="button" class="icon-button" title="Undo" aria-label="Undo" [disabled]="!canUndo" (click)="undo()">↶</button>
+        <button type="button" class="icon-button" title="Redo" aria-label="Redo" [disabled]="!canRedo" (click)="redo()">↷</button>
         <span class="toolbar-separator" aria-hidden="true"></span>
         <button type="button" class="icon-button" title="Zoom out" aria-label="Zoom out" (click)="zoomOut()">−</button>
         <span class="zoom-value">{{ zoomPercent() }}%</span>
@@ -83,9 +83,13 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
   @ViewChild('diagramDiv', { static: true }) diagramDiv!: ElementRef<HTMLDivElement>;
 
   @Input() model!: EventTreeModel;
+  @Input() canUndo = false;
+  @Input() canRedo = false;
   @Output() readonly addFunctionEvent = new EventEmitter<void>();
   @Output() readonly removeFunctionEvent = new EventEmitter<void>();
   @Output() readonly addBranch = new EventEmitter<string>();
+  @Output() readonly undoRequested = new EventEmitter<void>();
+  @Output() readonly redoRequested = new EventEmitter<void>();
 
   private diagram?: go.Diagram;
   private resizeObserver?: ResizeObserver;
@@ -127,17 +131,15 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
   requestBranch(): void {
     const key = this.selectedBranchKey();
-    if (key && this.selectedBranchCount() < 10) {
-      this.addBranch.emit(key);
-    }
+    if (key && this.selectedBranchCount() < 10) this.addBranch.emit(key);
   }
 
   undo(): void {
-    this.diagram?.commandHandler.undo();
+    if (this.canUndo) this.undoRequested.emit();
   }
 
   redo(): void {
-    this.diagram?.commandHandler.redo();
+    if (this.canRedo) this.redoRequested.emit();
   }
 
   zoomOut(): void {
@@ -185,6 +187,14 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     });
   }
 
+  private resizeDot(node: go.GraphObject, size: number): void {
+    const part = node.part as go.Node | null;
+    const dot = part?.findObject('DOT') as go.Shape | null;
+    if (!dot) return;
+    dot.width = size;
+    dot.height = size;
+  }
+
   refreshLayout(): void {
     if (!this.diagram || !this.model) return;
 
@@ -192,9 +202,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     this.installTemplates(metrics);
     this.applyModel(metrics);
 
-    if (this.diagram.scale < 0.5 || this.diagram.scale > 2) {
-      this.diagram.scale = 1;
-    }
+    if (this.diagram.scale < 0.5 || this.diagram.scale > 2) this.diagram.scale = 1;
     this.lockViewport();
     this.updateZoomPercent();
     this.selectedBranchCount.set(this.countDirectBranches(this.selectedBranchKey()));
@@ -230,7 +238,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const $ = go.GraphObject.make;
 
     this.diagram = $(go.Diagram, this.diagramDiv.nativeElement, {
-      'undoManager.isEnabled': true,
+      'undoManager.isEnabled': false,
       'animationManager.isEnabled': false,
       allowMove: false,
       allowCopy: false,
@@ -249,19 +257,14 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
 
     this.diagram.addDiagramListener('ViewportBoundsChanged', () => {
       if (!this.diagram) return;
-      if (!this.diagram.position.equals(new go.Point(0, 0))) {
-        this.diagram.position = new go.Point(0, 0);
-      }
+      if (!this.diagram.position.equals(new go.Point(0, 0))) this.diagram.position = new go.Point(0, 0);
       this.ngZone.run(() => this.updateZoomPercent());
     });
 
     this.diagram.addDiagramListener('ChangedSelection', () => {
       const node = this.diagram?.selection.first() as go.Node | null;
       const data = node?.data as { category?: string; key?: string } | undefined;
-      const key =
-        data?.category === 'BRANCH' || data?.category === 'FE_POINT'
-          ? (data.key ?? null)
-          : null;
+      const key = data?.category === 'BRANCH' || data?.category === 'FE_POINT' ? (data.key ?? null) : null;
 
       if (key) {
         this.selectBranchSource(key);
@@ -299,14 +302,12 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           $(go.RowColumnDefinition, { row: 0, height: 60 }),
           $(go.RowColumnDefinition, { row: 1, height: 22 }),
           $(go.TextBlock, {
-            row: 0, margin: new go.Margin(4, 5, 2, 5),
-            width: Math.max(20, metrics.blockWidth - 10), verticalAlignment: go.Spot.Top,
-            font: '10px Arial, sans-serif', wrap: go.Wrap.Fit,
+            row: 0, margin: new go.Margin(4, 5, 2, 5), width: Math.max(20, metrics.blockWidth - 10),
+            verticalAlignment: go.Spot.Top, font: '10px Arial, sans-serif', wrap: go.Wrap.Fit,
             overflow: go.TextOverflow.Ellipsis, stroke: '#111827'
           }, new go.Binding('text', 'label')),
           $(go.Shape, 'LineH', {
-            row: 1, alignment: go.Spot.Top, stretch: go.Stretch.Horizontal,
-            stroke: '#6b7280', strokeWidth: 1
+            row: 1, alignment: go.Spot.Top, stretch: go.Stretch.Horizontal, stroke: '#6b7280', strokeWidth: 1
           }),
           $(go.TextBlock, {
             row: 1, margin: new go.Margin(2, 4, 2, 4), width: Math.max(20, metrics.blockWidth - 8),
@@ -346,39 +347,38 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       )
     );
 
+    const dotNodeProps = {
+      selectionAdorned: false,
+      cursor: 'pointer',
+      locationSpot: go.Spot.Center,
+      fromSpot: go.Spot.Center,
+      toSpot: go.Spot.Center,
+      mouseEnter: (_event: go.InputEvent, node: go.GraphObject) => this.resizeDot(node, 8),
+      mouseLeave: (_event: go.InputEvent, node: go.GraphObject) => this.resizeDot(node, 5),
+      click: (_event: go.InputEvent, node: go.GraphObject) => {
+        const part = node.part as go.Node | null;
+        const key = part?.data?.key as string | undefined;
+        if (key) this.selectBranchSource(key);
+      }
+    };
+
+    const dotShape = () => $(go.Shape, 'Circle', {
+      name: 'DOT', width: 5, height: 5, fill: '#111111', stroke: '#111111', strokeWidth: 0, portId: ''
+    });
+
     this.diagram.nodeTemplateMap.add('FE_POINT',
       $(go.Node, 'Spot',
-        {
-          selectionAdorned: true, cursor: 'pointer', locationSpot: go.Spot.Center,
-          fromSpot: go.Spot.Center, toSpot: go.Spot.Center,
-          click: (_event: go.InputEvent, node: go.GraphObject) => {
-            const part = node.part as go.Node | null;
-            const key = part?.data?.key as string | undefined;
-            if (key) this.selectBranchSource(key);
-          }
-        },
+        dotNodeProps,
         new go.Binding('location', 'loc', go.Point.parse),
-        $(go.Shape, 'Circle', {
-          width: 8, height: 8, fill: '#ffffff', stroke: '#334155', strokeWidth: 1.2, portId: ''
-        })
+        dotShape()
       )
     );
 
     this.diagram.nodeTemplateMap.add('BRANCH',
       $(go.Node, 'Spot',
-        {
-          selectionAdorned: true, cursor: 'pointer', locationSpot: go.Spot.Center,
-          fromSpot: go.Spot.Center, toSpot: go.Spot.Center,
-          click: (_event: go.InputEvent, node: go.GraphObject) => {
-            const part = node.part as go.Node | null;
-            const key = part?.data?.key as string | undefined;
-            if (key) this.selectBranchSource(key);
-          }
-        },
+        dotNodeProps,
         new go.Binding('location', 'loc', go.Point.parse),
-        $(go.Shape, 'Circle', {
-          width: 8, height: 8, fill: '#ffffff', stroke: '#334155', strokeWidth: 1.2, portId: ''
-        })
+        dotShape()
       )
     );
 
@@ -525,9 +525,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       if (depth > 20) return metrics.headerHeight + 50;
       if (sequenceCenterY.has(key)) return sequenceCenterY.get(key)!;
 
-      const branch = this.model.nodes.find(
-        (node) => node.key === key && node.category === 'BRANCH'
-      );
+      const branch = this.model.nodes.find((node) => node.key === key && node.category === 'BRANCH');
       if (branch?.pathSequenceKey && sequenceCenterY.has(branch.pathSequenceKey)) {
         return sequenceCenterY.get(branch.pathSequenceKey)!;
       }
@@ -552,7 +550,6 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     });
 
     const renderedLinks: any[] = [...baselineLinks];
-
     const branchNodeKeys = new Set(
       this.model.nodes.filter((node) => node.category === 'BRANCH').map((node) => node.key)
     );
