@@ -139,6 +139,7 @@ export class EventTreeRepository {
 
       let columnIndex: number | null = null;
       let sourceLevel = 0;
+      let sourcePathSequenceKey = 'S1';
 
       const functionPointMatch = /^FEPOINT-(\d+)$/.exec(fromKey);
       if (functionPointMatch) {
@@ -148,6 +149,7 @@ export class EventTreeRepository {
         if (source) {
           columnIndex = source.columnIndex ?? 1;
           sourceLevel = source.level ?? 0;
+          sourcePathSequenceKey = source.pathSequenceKey ?? 'S1';
         }
       }
 
@@ -175,6 +177,7 @@ export class EventTreeRepository {
           label: `FE ${column} branch point`,
           columnIndex: column,
           originColumnIndex: columnIndex,
+          pathSequenceKey: sequenceKey,
           level: sourceLevel + 1
         });
 
@@ -201,21 +204,70 @@ export class EventTreeRepository {
         outcome: 'OTHER' as const
       });
 
+      const nextNodes = [
+        ...tree.nodes,
+        ...branchNodes,
+        {
+          key: sequenceKey,
+          category: 'SEQUENCE' as const,
+          label: `Sequence ${sequenceNo}`,
+          sequenceNo,
+          parentSequenceKey: sourcePathSequenceKey,
+          branchColumnIndex: columnIndex,
+          frequency: '',
+          consequence: '',
+          resultCode: ''
+        }
+      ];
+
+      const sequences = nextNodes.filter((node) => node.category === 'SEQUENCE');
+      const children = new Map<string, typeof sequences>();
+
+      sequences.forEach((sequence) => {
+        const parent = sequence.parentSequenceKey;
+        if (!parent) return;
+        const list = children.get(parent) ?? [];
+        list.push(sequence);
+        children.set(parent, list);
+      });
+
+      children.forEach((list) => {
+        list.sort((a, b) => {
+          const columnDiff = (b.branchColumnIndex ?? 0) - (a.branchColumnIndex ?? 0);
+          if (columnDiff !== 0) return columnDiff;
+          return (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0);
+        });
+      });
+
+      const orderedKeys: string[] = [];
+      const visit = (key: string): void => {
+        orderedKeys.push(key);
+        (children.get(key) ?? []).forEach((child) => visit(child.key));
+      };
+
+      const roots = sequences
+        .filter((sequence) => !sequence.parentSequenceKey)
+        .sort((a, b) => (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0));
+
+      roots.forEach((root) => visit(root.key));
+
+      const displayNo = new Map(
+        orderedKeys.map((key, index) => [key, index + 1])
+      );
+
+      const normalizedNodes = nextNodes.map((node) => {
+        if (node.category !== 'SEQUENCE') return node;
+        const nextNo = displayNo.get(node.key) ?? node.sequenceNo ?? 1;
+        return {
+          ...node,
+          sequenceNo: nextNo,
+          label: `Sequence ${nextNo}`
+        };
+      });
+
       return {
         ...tree,
-        nodes: [
-          ...tree.nodes,
-          ...branchNodes,
-          {
-            key: sequenceKey,
-            category: 'SEQUENCE' as const,
-            label: `Sequence ${sequenceNo}`,
-            sequenceNo,
-            frequency: '',
-            consequence: '',
-            resultCode: ''
-          }
-        ],
+        nodes: normalizedNodes,
         links: [
           ...tree.links,
           ...branchLinks
