@@ -363,7 +363,23 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       $(go.Node, 'Spot',
         { selectable: false, locationSpot: go.Spot.Center, fromSpot: go.Spot.Center, toSpot: go.Spot.Center },
         new go.Binding('location', 'loc', go.Point.parse),
-        $(go.Shape, 'Rectangle', { width: 1, height: 1, fill: null, stroke: null, portId: '' })
+        $(go.Shape, 'Rectangle', { width: 0, height: 0, fill: null, stroke: null, portId: '' })
+      )
+    );
+
+    this.diagram.nodeTemplateMap.add('START_POINT',
+      $(go.Node, 'Spot',
+        {
+          selectable: false,
+          cursor: 'default',
+          locationSpot: go.Spot.Center,
+          fromSpot: go.Spot.Center,
+          toSpot: go.Spot.Center
+        },
+        new go.Binding('location', 'loc', go.Point.parse),
+        $(go.Shape, 'Circle', {
+          width: 5, height: 5, fill: '#111111', stroke: '#111111', strokeWidth: 0, portId: ''
+        })
       )
     );
 
@@ -519,7 +535,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const branchNodes = this.model.nodes.filter((node) => node.category === 'BRANCH');
 
     const baselineNodes = [
-      { key: '__BASELINE_START__', category: 'ANCHOR', loc: `0 ${baselineY}` },
+      { key: '__BASELINE_START__', category: 'START_POINT', loc: `3 ${baselineY}` },
       { key: '__BASELINE_END__', category: 'ANCHOR', loc: `${metrics.resultX} ${baselineY}` }
     ];
     nodes.push(...baselineNodes);
@@ -534,7 +550,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     });
     baselineLinks.push({ from: previousKey, to: '__BASELINE_END__' });
 
-    if (!branchNodes.length) {
+    if (!this.model.links.length) {
       this.diagram.model = new go.GraphLinksModel(nodes, baselineLinks);
       return;
     }
