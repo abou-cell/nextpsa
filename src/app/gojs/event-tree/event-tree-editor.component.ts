@@ -542,33 +542,35 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       });
     });
 
-    const branchColumnBySequence = new Map<string, number>();
-    this.model.links.forEach((link) => {
-      const branch = this.model.nodes.find(
-        (node) => node.key === link.from && node.category === 'BRANCH'
-      );
-      const sequence = this.model.nodes.find(
-        (node) => node.key === link.to && node.category === 'SEQUENCE'
-      );
-      if (branch && sequence) {
-        branchColumnBySequence.set(sequence.key, branch.originColumnIndex ?? branch.columnIndex ?? 1);
-      }
+    const allSequences = this.model.nodes.filter((node) => node.category === 'SEQUENCE');
+    const sequenceByKey = new Map(allSequences.map((sequence) => [sequence.key, sequence]));
+    const children = new Map<string, EventTreeNodeData[]>();
+
+    allSequences.forEach((sequence) => {
+      if (!sequence.parentSequenceKey) return;
+      const list = children.get(sequence.parentSequenceKey) ?? [];
+      list.push(sequence);
+      children.set(sequence.parentSequenceKey, list);
     });
 
-    const sequenceNodes = [...this.model.nodes]
-      .filter((node) => node.category === 'SEQUENCE')
-      .sort((a, b) => {
-        if ((a.sequenceNo ?? 0) === 1) return -1;
-        if ((b.sequenceNo ?? 0) === 1) return 1;
-
-        const columnA = branchColumnBySequence.get(a.key) ?? 0;
-        const columnB = branchColumnBySequence.get(b.key) ?? 0;
-
-        // Later Function Events occupy upper lanes; earlier FEs occupy lower lanes.
-        // This nesting prevents FE1 branch horizontals from crossing FE2/FE3 verticals.
-        if (columnA !== columnB) return columnB - columnA;
+    children.forEach((list) => {
+      list.sort((a, b) => {
+        const columnDiff = (b.branchColumnIndex ?? 0) - (a.branchColumnIndex ?? 0);
+        if (columnDiff !== 0) return columnDiff;
         return (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0);
       });
+    });
+
+    const sequenceNodes: EventTreeNodeData[] = [];
+    const visitSequence = (sequence: EventTreeNodeData): void => {
+      sequenceNodes.push(sequence);
+      (children.get(sequence.key) ?? []).forEach(visitSequence);
+    };
+
+    allSequences
+      .filter((sequence) => !sequence.parentSequenceKey || !sequenceByKey.has(sequence.parentSequenceKey))
+      .sort((a, b) => (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0))
+      .forEach(visitSequence);
 
     // A brand-new ET has no branches: RiskSpectrum still shows one result line.
     const visibleSequences = sequenceNodes.length
@@ -629,8 +631,15 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
     const getTargetY = (key: string, depth = 0): number => {
       if (depth > 20) return metrics.headerHeight + 50;
       if (sequenceCenterY.has(key)) return sequenceCenterY.get(key)!;
-      if (yMemo.has(key)) return yMemo.get(key)!;
 
+      const branch = this.model.nodes.find(
+        (node) => node.key === key && node.category === 'BRANCH'
+      );
+      if (branch?.pathSequenceKey && sequenceCenterY.has(branch.pathSequenceKey)) {
+        return sequenceCenterY.get(branch.pathSequenceKey)!;
+      }
+
+      if (yMemo.has(key)) return yMemo.get(key)!;
       const targets = outgoing.get(key) ?? [];
       if (!targets.length) return metrics.headerHeight + 50;
       const ys = targets.map((target) => getTargetY(target, depth + 1));
@@ -643,7 +652,9 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
       const maxColumn = Math.max(1, this.model.functionEvents.length);
       const column = Math.max(1, Math.min(node.columnIndex ?? 1, maxColumn));
       const x = column * metrics.blockWidth + metrics.blockWidth / 2;
-      const y = getTargetY(node.key);
+      const y = node.pathSequenceKey && sequenceCenterY.has(node.pathSequenceKey)
+        ? sequenceCenterY.get(node.pathSequenceKey)!
+        : getTargetY(node.key);
       nodes.push({ ...node, loc: `${x} ${y}` });
     });
 
