@@ -177,6 +177,7 @@ export class EventTreeRepository {
             : `FE ${column} branch point`,
           columnIndex: column,
           originColumnIndex: columnIndex,
+          hideMarker: column === columnIndex,
           level: sourceLevel + 1
         });
 
