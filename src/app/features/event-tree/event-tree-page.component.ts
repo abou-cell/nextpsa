@@ -33,6 +33,10 @@ import { EventTreeModel } from './event-tree.models';
           <app-event-tree-editor
             #eventTreeEditor
             [model]="repository.eventTree()"
+            [canUndo]="repository.canUndo()"
+            [canRedo]="repository.canRedo()"
+            (undoRequested)="undo()"
+            (redoRequested)="redo()"
             (addFunctionEvent)="addFunctionEvent()"
             (removeFunctionEvent)="removeFunctionEvent()"
             (addBranch)="addBranch($event)">
@@ -138,6 +142,16 @@ export class EventTreePageComponent {
 
   selectEventTree(tree: EventTreeModel): void {
     this.repository.selectEventTree(tree.id);
+    requestAnimationFrame(() => this.eventTreeEditor?.refreshLayout());
+  }
+
+  undo(): void {
+    this.repository.undo();
+    requestAnimationFrame(() => this.eventTreeEditor?.refreshLayout());
+  }
+
+  redo(): void {
+    this.repository.redo();
     requestAnimationFrame(() => this.eventTreeEditor?.refreshLayout());
   }
 
