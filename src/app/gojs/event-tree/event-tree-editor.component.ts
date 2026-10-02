@@ -422,7 +422,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           stroke: '#334155',
           strokeWidth: 1.2,
           portId: ''
-        })
+        }, new go.Binding('visible', 'hideMarker', (hide) => !hide))
       )
     );
 
@@ -448,7 +448,7 @@ export class EventTreeEditorComponent implements AfterViewInit, OnChanges, OnDes
           stroke: '#334155',
           strokeWidth: 1.2,
           portId: ''
-        })
+        }, new go.Binding('visible', 'hideMarker', (hide) => !hide))
       )
     );
 
