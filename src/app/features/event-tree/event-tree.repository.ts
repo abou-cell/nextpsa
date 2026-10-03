@@ -1,5 +1,5 @@
 import { Injectable, computed, signal } from '@angular/core';
-import { EventTreeModel } from './event-tree.models';
+import { EventTreeModel, EventTreeNodeData } from './event-tree.models';
 
 const EVENT_TREES: EventTreeModel[] = [
   {
@@ -104,20 +104,17 @@ export class EventTreeRepository {
       const functionId = `FE-${newColumn}`;
       const code = `F${newColumn}`;
       const nodeKey = `FE${newColumn}`;
-      const newFunctionNode = {
+      const newFunctionNode: EventTreeNodeData = {
         key: nodeKey,
-        category: 'FUNCTION' as const,
+        category: 'FUNCTION',
         label: `Function Event ${newColumn}`,
         code,
         columnIndex: newColumn
       };
 
-      const nextNodes = [...tree.nodes, newFunctionNode];
+      const nextNodes: EventTreeNodeData[] = [...tree.nodes, newFunctionNode];
       const nextLinks = [...tree.links];
 
-      // Existing branches must be extended through every newly added Function Event.
-      // Otherwise the new FE column appears without a branch point on paths that were
-      // created before this FE existed.
       const branchSequences = tree.nodes.filter(
         (node) => node.category === 'SEQUENCE' && node.key !== 'S1'
       );
@@ -128,49 +125,81 @@ export class EventTreeRepository {
             && node.pathSequenceKey === sequence.key
             && node.columnIndex === newColumn
         );
-        if (alreadyExtended) return;
 
-        const incomingIndex = nextLinks.findIndex((link) => link.to === sequence.key);
-        if (incomingIndex < 0) return;
+        if (!alreadyExtended) {
+          const incomingIndex = nextLinks.findIndex((link) => link.to === sequence.key);
 
-        const incoming = nextLinks[incomingIndex];
-        const predecessor = nextNodes.find((node) => node.key === incoming.from);
-        const branchGroup = sequence.key.replace(/^S/, 'B');
-        let branchKey = `${branchGroup}-C${newColumn}`;
-        let suffix = 2;
-        while (nextNodes.some((node) => node.key === branchKey)) {
-          branchKey = `${branchGroup}-C${newColumn}-${suffix}`;
-          suffix += 1;
+          if (incomingIndex >= 0) {
+            const incoming = nextLinks[incomingIndex];
+            const predecessor = nextNodes.find((node) => node.key === incoming.from);
+            const branchGroup = sequence.key.replace(/^S/, 'B');
+            let branchKey = `${branchGroup}-C${newColumn}`;
+            let suffix = 2;
+
+            while (nextNodes.some((node) => node.key === branchKey)) {
+              branchKey = `${branchGroup}-C${newColumn}-${suffix}`;
+              suffix += 1;
+            }
+
+            const originColumnIndex = sequence.branchColumnIndex
+              ?? predecessor?.originColumnIndex
+              ?? predecessor?.columnIndex
+              ?? Math.max(1, newColumn - 1);
+
+            nextNodes.push({
+              key: branchKey,
+              category: 'BRANCH',
+              label: `FE ${newColumn} branch point`,
+              columnIndex: newColumn,
+              originColumnIndex,
+              pathSequenceKey: sequence.key,
+              level: predecessor?.level ?? 1
+            });
+
+            nextLinks[incomingIndex] = {
+              ...incoming,
+              to: branchKey,
+              label: /^Branch\s\d+/.test(incoming.label ?? '') ? incoming.label : 'Continue'
+            };
+            nextLinks.push({
+              from: branchKey,
+              to: sequence.key,
+              label: 'Result',
+              outcome: 'OTHER' as const
+            });
+          }
         }
 
-        const originColumnIndex = sequence.branchColumnIndex
-          ?? predecessor?.originColumnIndex
-          ?? predecessor?.columnIndex
-          ?? Math.max(1, newColumn - 1);
+        // Repair invariant: every branch path must expose one selectable point
+        // at every Function Event column after its origin. This also repairs
+        // older trees that were created before the extension logic existed.
+        const originColumn = Math.max(1, sequence.branchColumnIndex ?? 1);
+        for (let column = originColumn + 1; column <= newColumn; column += 1) {
+          const pointExists = nextNodes.some(
+            (node) => node.category === 'BRANCH'
+              && node.pathSequenceKey === sequence.key
+              && node.columnIndex === column
+          );
+          if (pointExists) continue;
 
-        nextNodes.push({
-          key: branchKey,
-          category: 'BRANCH' as const,
-          label: `FE ${newColumn} branch point`,
-          columnIndex: newColumn,
-          originColumnIndex,
-          pathSequenceKey: sequence.key,
-          level: predecessor?.level ?? 1
-        });
+          const branchGroup = sequence.key.replace(/^S/, 'B');
+          let pointKey = `${branchGroup}-P${column}`;
+          let suffix = 2;
+          while (nextNodes.some((node) => node.key === pointKey)) {
+            pointKey = `${branchGroup}-P${column}-${suffix}`;
+            suffix += 1;
+          }
 
-        // Preserve the first Branch N label when the branch previously went
-        // directly from the source FE to the sequence. Otherwise continue the path.
-        nextLinks[incomingIndex] = {
-          ...incoming,
-          to: branchKey,
-          label: /^Branch\s\d+/.test(incoming.label ?? '') ? incoming.label : 'Continue'
-        };
-        nextLinks.push({
-          from: branchKey,
-          to: sequence.key,
-          label: 'Result',
-          outcome: 'OTHER' as const
-        });
+          nextNodes.push({
+            key: pointKey,
+            category: 'BRANCH',
+            label: `FE ${column} branch point`,
+            columnIndex: column,
+            originColumnIndex: originColumn,
+            pathSequenceKey: sequence.key,
+            level: 1
+          });
+        }
       });
 
       return {
@@ -248,7 +277,7 @@ export class EventTreeRepository {
       const sequenceNo = sequenceCount + 1;
       const sequenceKey = `S${sequenceNo}`;
       const branchGroup = `B${sequenceNo}`;
-      const branchNodes = [];
+      const branchNodes: EventTreeNodeData[] = [];
       const branchLinks = [];
       let previousKey = fromKey;
 
@@ -256,7 +285,7 @@ export class EventTreeRepository {
         const branchKey = `${branchGroup}-C${column}`;
         branchNodes.push({
           key: branchKey,
-          category: 'BRANCH' as const,
+          category: 'BRANCH',
           label: `FE ${column} branch point`,
           columnIndex: column,
           originColumnIndex: columnIndex,
@@ -279,12 +308,12 @@ export class EventTreeRepository {
         outcome: 'OTHER' as const
       });
 
-      const nextNodes = [
+      const nextNodes: EventTreeNodeData[] = [
         ...tree.nodes,
         ...branchNodes,
         {
           key: sequenceKey,
-          category: 'SEQUENCE' as const,
+          category: 'SEQUENCE',
           label: `Sequence ${sequenceNo}`,
           sequenceNo,
           parentSequenceKey: sourcePathSequenceKey,
