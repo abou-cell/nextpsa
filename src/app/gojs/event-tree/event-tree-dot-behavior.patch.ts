@@ -1,7 +1,7 @@
 import * as go from 'gojs';
 import { EventTreeEditorComponent } from './event-tree-editor.component';
 
-const NORMAL_DOT_SIZE = 1.4;
+const NORMAL_DOT_SIZE = 1.5;
 const ACTIVE_DOT_SIZE = 6;
 const HOVER_HIT_SIZE = 18;
 
