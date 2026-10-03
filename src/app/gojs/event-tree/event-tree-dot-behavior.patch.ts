@@ -1,8 +1,8 @@
 import * as go from 'gojs';
 import { EventTreeEditorComponent } from './event-tree-editor.component';
 
-const NORMAL_DOT_SIZE = 3.5;
-const ACTIVE_DOT_SIZE = 5;
+const NORMAL_DOT_SIZE = 4.5;
+const ACTIVE_DOT_SIZE = 6;
 
 export function installEventTreeDotBehaviorPatch(): void {
   const prototype = EventTreeEditorComponent.prototype as any;
