@@ -1,5 +1,5 @@
 import { Injectable, computed, signal } from '@angular/core';
-import { EventTreeModel } from './event-tree.models';
+import { EventTreeModel, EventTreeNodeData } from './event-tree.models';
 
 const EVENT_TREES: EventTreeModel[] = [
   {
@@ -104,15 +104,15 @@ export class EventTreeRepository {
       const functionId = `FE-${newColumn}`;
       const code = `F${newColumn}`;
       const nodeKey = `FE${newColumn}`;
-      const newFunctionNode = {
+      const newFunctionNode: EventTreeNodeData = {
         key: nodeKey,
-        category: 'FUNCTION' as const,
+        category: 'FUNCTION',
         label: `Function Event ${newColumn}`,
         code,
         columnIndex: newColumn
       };
 
-      const nextNodes = [...tree.nodes, newFunctionNode];
+      const nextNodes: EventTreeNodeData[] = [...tree.nodes, newFunctionNode];
       const nextLinks = [...tree.links];
 
       const branchSequences = tree.nodes.filter(
@@ -148,7 +148,7 @@ export class EventTreeRepository {
 
             nextNodes.push({
               key: branchKey,
-              category: 'BRANCH' as const,
+              category: 'BRANCH',
               label: `FE ${newColumn} branch point`,
               columnIndex: newColumn,
               originColumnIndex,
@@ -192,7 +192,7 @@ export class EventTreeRepository {
 
           nextNodes.push({
             key: pointKey,
-            category: 'BRANCH' as const,
+            category: 'BRANCH',
             label: `FE ${column} branch point`,
             columnIndex: column,
             originColumnIndex: originColumn,
@@ -277,7 +277,7 @@ export class EventTreeRepository {
       const sequenceNo = sequenceCount + 1;
       const sequenceKey = `S${sequenceNo}`;
       const branchGroup = `B${sequenceNo}`;
-      const branchNodes = [];
+      const branchNodes: EventTreeNodeData[] = [];
       const branchLinks = [];
       let previousKey = fromKey;
 
@@ -285,7 +285,7 @@ export class EventTreeRepository {
         const branchKey = `${branchGroup}-C${column}`;
         branchNodes.push({
           key: branchKey,
-          category: 'BRANCH' as const,
+          category: 'BRANCH',
           label: `FE ${column} branch point`,
           columnIndex: column,
           originColumnIndex: columnIndex,
@@ -308,12 +308,12 @@ export class EventTreeRepository {
         outcome: 'OTHER' as const
       });
 
-      const nextNodes = [
+      const nextNodes: EventTreeNodeData[] = [
         ...tree.nodes,
         ...branchNodes,
         {
           key: sequenceKey,
-          category: 'SEQUENCE' as const,
+          category: 'SEQUENCE',
           label: `Sequence ${sequenceNo}`,
           sequenceNo,
           parentSequenceKey: sourcePathSequenceKey,
