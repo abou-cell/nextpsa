@@ -1,8 +1,9 @@
 import * as go from 'gojs';
 import { EventTreeEditorComponent } from './event-tree-editor.component';
 
-const NORMAL_DOT_SIZE = 1.2;
+const NORMAL_DOT_SIZE = 1.4;
 const ACTIVE_DOT_SIZE = 6;
+const HOVER_HIT_SIZE = 18;
 
 export function installEventTreeDotBehaviorPatch(): void {
   const prototype = EventTreeEditorComponent.prototype as any;
@@ -18,6 +19,18 @@ export function installEventTreeDotBehaviorPatch(): void {
     const diagram = this.diagram as go.Diagram | undefined;
     if (!diagram) return;
 
+    const addHoverHitArea = (template: go.Node): void => {
+      template.add(
+        go.GraphObject.make(go.Shape, 'Circle', {
+          name: 'HIT_AREA',
+          width: HOVER_HIT_SIZE,
+          height: HOVER_HIT_SIZE,
+          fill: 'rgba(0,0,0,0.001)',
+          stroke: null
+        })
+      );
+    };
+
     const configureSelectableDot = (category: 'FE_POINT' | 'BRANCH'): void => {
       const template = diagram.nodeTemplateMap.get(category) as go.Node | null;
       if (!template) return;
@@ -27,6 +40,8 @@ export function installEventTreeDotBehaviorPatch(): void {
         dot.width = NORMAL_DOT_SIZE;
         dot.height = NORMAL_DOT_SIZE;
       }
+
+      addHoverHitArea(template);
 
       template.mouseEnter = (_event: go.InputEvent, node: go.GraphObject) => {
         this.resizeDot(node, ACTIVE_DOT_SIZE);
@@ -57,6 +72,8 @@ export function installEventTreeDotBehaviorPatch(): void {
         startDot.width = NORMAL_DOT_SIZE;
         startDot.height = NORMAL_DOT_SIZE;
       }
+
+      addHoverHitArea(startTemplate);
 
       startTemplate.mouseEnter = (_event: go.InputEvent, node: go.GraphObject) => {
         this.resizeDot(node, ACTIVE_DOT_SIZE);
