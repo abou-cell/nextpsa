@@ -1,8 +1,9 @@
-import * as go from 'gojs';
 import { EventTreeEditorComponent } from './event-tree-editor.component';
 
 interface EventTreeMetrics {
+  viewportWidth: number;
   headerHeight: number;
+  resultWidth: number;
   resultX: number;
   blockWidth: number;
   sequenceRowHeight: number;
@@ -11,9 +12,11 @@ interface EventTreeMetrics {
 const DEFAULT_ROW_HEIGHT = 34;
 const MIN_ROW_HEIGHT = 18;
 const MAX_ROW_HEIGHT = 58;
-const MIN_BRANCH_ZOOM = 0.6;
-const MAX_BRANCH_ZOOM = 1.4;
-const BRANCH_ZOOM_STEP = 0.1;
+const MIN_TABLE_ZOOM = 0.6;
+const MAX_TABLE_ZOOM = 1.4;
+const TABLE_ZOOM_STEP = 0.1;
+const MIN_RESULT_WIDTH = 260;
+const MIN_TREE_WIDTH = 280;
 const TOOLBAR_HEIGHT = 42;
 
 export function installEventTreeBodyDensityPatch(): void {
@@ -29,11 +32,20 @@ export function installEventTreeBodyDensityPatch(): void {
   const getRowHeight = (component: any): number =>
     Math.max(MIN_ROW_HEIGHT, Math.min(MAX_ROW_HEIGHT, component.__eventTreeSequenceRowHeight ?? DEFAULT_ROW_HEIGHT));
 
-  const getBranchZoom = (component: any): number =>
-    Math.max(MIN_BRANCH_ZOOM, Math.min(MAX_BRANCH_ZOOM, component.__eventTreeBranchZoom ?? 1));
+  const getTableZoom = (component: any): number =>
+    Math.max(MIN_TABLE_ZOOM, Math.min(MAX_TABLE_ZOOM, component.__eventTreeResultTableZoom ?? 1));
+
+  const defaultResultWidth = (viewportWidth: number): number =>
+    Math.round(Math.max(330, Math.min(520, viewportWidth * 0.38)));
+
+  const resultWidthForZoom = (component: any, viewportWidth: number): number => {
+    const maxWidth = Math.max(MIN_RESULT_WIDTH, viewportWidth - MIN_TREE_WIDTH);
+    const requested = Math.round(defaultResultWidth(viewportWidth) * getTableZoom(component));
+    return Math.max(MIN_RESULT_WIDTH, Math.min(maxWidth, requested));
+  };
 
   const refreshZoomLabel = (component: any): void => {
-    component.zoomPercent?.set?.(Math.round(getBranchZoom(component) * 100));
+    component.zoomPercent?.set?.(Math.round(getTableZoom(component) * 100));
   };
 
   const updateRowHandle = (component: any): void => {
@@ -55,36 +67,13 @@ export function installEventTreeBodyDensityPatch(): void {
     handle.style.display = top >= TOOLBAR_HEIGHT + metrics.headerHeight - 2 ? 'block' : 'none';
   };
 
-  const applyBranchOnlyZoom = (component: any, metrics: EventTreeMetrics): void => {
-    const diagram = component.diagram as go.Diagram | undefined;
-    if (!diagram) return;
-
-    const zoom = getBranchZoom(component);
-    diagram.scale = 1;
-
-    diagram.startTransaction('branch-only-zoom');
-    diagram.nodes.each((node: go.Node) => {
-      const data = node.data as {
-        category?: string;
-        branchColumnIndex?: number;
-        originColumnIndex?: number;
-      } | undefined;
-
-      if (data?.category !== 'BRANCH') return;
-
-      const column = Math.max(1, data.originColumnIndex ?? data.branchColumnIndex ?? 1);
-      const originX = column * metrics.blockWidth + metrics.blockWidth / 2;
-      const current = node.location;
-      const distance = current.x - originX;
-      const nextX = Math.max(2, Math.min(metrics.resultX - 2, originX + distance * zoom));
-      node.location = new go.Point(nextX, current.y);
-    });
-    diagram.commitTransaction('branch-only-zoom');
-
-    refreshZoomLabel(component);
-  };
-
   prototype.measureLayout = function(): EventTreeMetrics {
+    const firstPass = originalMeasureLayout.call(this) as EventTreeMetrics;
+
+    // The toolbar zoom controls change only the horizontal width of the
+    // No./Freq./Conseq./Code result table. They never scale IE, FE or branches.
+    this.__resultTableWidth = resultWidthForZoom(this, firstPass.viewportWidth);
+
     const metrics = originalMeasureLayout.call(this) as EventTreeMetrics;
     metrics.sequenceRowHeight = getRowHeight(this);
     this.__eventTreeViewportMetrics = metrics;
@@ -94,32 +83,32 @@ export function installEventTreeBodyDensityPatch(): void {
   prototype.applyModel = function(metrics: EventTreeMetrics): void {
     originalApplyModel.call(this, metrics);
     this.__eventTreeViewportMetrics = metrics;
-    requestAnimationFrame(() => {
-      applyBranchOnlyZoom(this, metrics);
-      updateRowHandle(this);
-    });
+    requestAnimationFrame(() => updateRowHandle(this));
   };
 
-  // Zoom controls now affect only the branch geometry. IE/FE headers and the
-  // No./Freq./Conseq./Code result table stay at a fixed scale.
   prototype.zoomOut = function(): void {
-    const next = Math.max(MIN_BRANCH_ZOOM, Math.round((getBranchZoom(this) - BRANCH_ZOOM_STEP) * 10) / 10);
-    if (next === getBranchZoom(this)) return;
-    this.__eventTreeBranchZoom = next;
+    const current = getTableZoom(this);
+    const next = Math.max(MIN_TABLE_ZOOM, Math.round((current - TABLE_ZOOM_STEP) * 10) / 10);
+    if (next === current) return;
+    this.__eventTreeResultTableZoom = next;
+    this.__eventTreeScrollY = 0;
     this.refreshLayout?.();
     refreshZoomLabel(this);
   };
 
   prototype.zoomIn = function(): void {
-    const next = Math.min(MAX_BRANCH_ZOOM, Math.round((getBranchZoom(this) + BRANCH_ZOOM_STEP) * 10) / 10);
-    if (next === getBranchZoom(this)) return;
-    this.__eventTreeBranchZoom = next;
+    const current = getTableZoom(this);
+    const next = Math.min(MAX_TABLE_ZOOM, Math.round((current + TABLE_ZOOM_STEP) * 10) / 10);
+    if (next === current) return;
+    this.__eventTreeResultTableZoom = next;
+    this.__eventTreeScrollY = 0;
     this.refreshLayout?.();
     refreshZoomLabel(this);
   };
 
   prototype.fit = function(): void {
-    this.__eventTreeBranchZoom = 1;
+    this.__eventTreeResultTableZoom = 1;
+    this.__resultTableWidth = undefined;
     this.__eventTreeScrollY = 0;
     this.refreshLayout?.();
     refreshZoomLabel(this);
@@ -205,7 +194,7 @@ export function installEventTreeBodyDensityPatch(): void {
 
   prototype.ngAfterViewInit = function(): void {
     originalAfterViewInit.call(this);
-    this.__eventTreeBranchZoom ??= 1;
+    this.__eventTreeResultTableZoom ??= 1;
     this.__eventTreeSequenceRowHeight ??= DEFAULT_ROW_HEIGHT;
     refreshZoomLabel(this);
     injectRowResizeHandle(this);
