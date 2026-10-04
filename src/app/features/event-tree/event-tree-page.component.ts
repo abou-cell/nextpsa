@@ -165,7 +165,7 @@ interface FunctionEventReorderDetail {
 
     .event-tree-browser-panel { min-width:0; min-height:0; overflow:hidden; background:#fff; display:grid; grid-template-rows:minmax(0,1fr) 24px; }
     .et-table-wrap { min-height:0; overflow:auto; background:#fff; }
-    .et-table { width:max-content; min-width:100%; border-collapse:collapse; table-layout:fixed; color:#111827; font-size:10px; }
+    .et-table { width:100%; border-collapse:collapse; table-layout:fixed; background:#fff; color:#111827; font-size:10px; }
     .et-table th, .et-table td { position:relative; height:25px; min-height:18px; padding:0 10px; border-right:1px solid #dfe6ee; border-bottom:1px solid #dfe6ee; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; box-sizing:border-box; }
     .et-table th { position:sticky; top:0; z-index:3; background:#f3f6fa; font-weight:800; user-select:none; }
     .et-table tbody tr { cursor:pointer; outline:none; }
