@@ -10,6 +10,7 @@ import { installEventTreeBrowserWidthPatch } from './app/features/event-tree/eve
 import { installEventTreeViewportPatch } from './app/gojs/event-tree/event-tree-viewport.patch';
 import { installEventTreeBodyDensityPatch } from './app/gojs/event-tree/event-tree-body-density.patch';
 import { installEventTreeBranchContextMenuPatch } from './app/gojs/event-tree/event-tree-branch-context-menu.patch';
+import { installEventTreeForwardSelectionPatch } from './app/gojs/event-tree/event-tree-forward-selection.patch';
 
 installEventTreeDotBehaviorPatch();
 installEventTreeHeaderDragPatch();
@@ -20,6 +21,7 @@ installEventTreeBrowserWidthPatch();
 installEventTreeViewportPatch();
 installEventTreeBodyDensityPatch();
 installEventTreeBranchContextMenuPatch();
+installEventTreeForwardSelectionPatch();
 
 bootstrapApplication(AppComponent, appConfig).catch((error: unknown) => {
   console.error('NextPSA bootstrap failed', error);
