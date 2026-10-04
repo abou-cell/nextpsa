@@ -12,6 +12,7 @@ type BranchClipboard = {
 
 let branchClipboard: BranchClipboard | null = null;
 let activeEventTreePage: any = null;
+let activeDomMenu: HTMLDivElement | null = null;
 
 export function installEventTreeBranchContextMenuPatch(): void {
   const pagePrototype = EventTreePageComponent.prototype as any;
@@ -28,7 +29,8 @@ export function installEventTreeBranchContextMenuPatch(): void {
   if (prototype.__eventTreeBranchContextMenuInstalled) return;
   prototype.__eventTreeBranchContextMenuInstalled = true;
 
-  const originalInstallTemplates = prototype.installTemplates;
+  const originalCreateDiagram = prototype.createDiagram;
+  const originalDestroy = prototype.ngOnDestroy;
 
   const getBranchSequenceKey = (component: any, branchKey: string): string | null => {
     const branch = component.model?.nodes?.find(
@@ -93,8 +95,7 @@ export function installEventTreeBranchContextMenuPatch(): void {
 
   const cutBranch = (component: any, branchKey: string): void => {
     if (!copyBranch(component, branchKey)) return;
-    const page = activeEventTreePage;
-    const repository = page?.repository;
+    const repository = activeEventTreePage?.repository;
     const treeId = component.model?.id;
     const rootSequenceKey = getBranchSequenceKey(component, branchKey);
     if (!repository || !treeId || !rootSequenceKey) return;
@@ -136,8 +137,7 @@ export function installEventTreeBranchContextMenuPatch(): void {
 
   const pasteBranch = (component: any, targetKey: string): void => {
     if (!branchClipboard) return;
-    const page = activeEventTreePage;
-    const repository = page?.repository;
+    const repository = activeEventTreePage?.repository;
     const treeId = component.model?.id;
     if (!repository || !treeId) return;
 
@@ -186,47 +186,147 @@ export function installEventTreeBranchContextMenuPatch(): void {
     component.selectBranchSource?.(branchKey);
   };
 
-  prototype.installTemplates = function(metrics: unknown): void {
-    originalInstallTemplates.call(this, metrics);
+  const removeDomMenu = (): void => {
+    activeDomMenu?.remove();
+    activeDomMenu = null;
+  };
 
-    const diagram = this.diagram as go.Diagram | undefined;
-    if (!diagram) return;
-    const template = diagram.nodeTemplateMap.get('BRANCH') as go.Node | null;
-    if (!template) return;
+  const findBranchAtEvent = (component: any, event: MouseEvent): go.Node | null => {
+    const diagram = component.diagram as go.Diagram | undefined;
+    const div = component.diagramDiv?.nativeElement as HTMLDivElement | undefined;
+    if (!diagram || !div) return null;
 
-    const $ = go.GraphObject.make;
-    const action = (label: string, handler: (key: string) => void, enabled?: () => boolean): go.Panel =>
-      $('ContextMenuButton',
-        $(go.TextBlock, label, {
-          margin: new go.Margin(5, 22, 5, 8),
-          font: '10px Arial, sans-serif',
-          stroke: '#111827'
-        }),
-        {
-          click: (_event: go.InputEvent, button: go.GraphObject) => {
-            const adornment = button.part as go.Adornment | null;
-            const adorned = adornment?.adornedPart as go.Node | null;
-            if (!adorned) return;
-            const key = adorned.data?.key as string | undefined;
-            if (!key) return;
-            adorned.isSelected = true;
-            handler(key);
-          }
-        },
-        enabled ? new go.Binding('isEnabled', '', () => enabled()).ofObject() : {}
-      );
+    const rect = div.getBoundingClientRect();
+    const viewPoint = new go.Point(event.clientX - rect.left, event.clientY - rect.top);
+    const docPoint = diagram.transformViewToDoc(viewPoint);
+    const direct = diagram.findPartAt(docPoint, true) as go.Part | null;
+    if (direct instanceof go.Node && (direct.data as any)?.category === 'BRANCH') return direct;
 
-    template.contextMenu =
-      $('ContextMenu',
-        action('Ajouter une branche', (key) => {
-          this.selectBranchSource?.(key);
-          if ((this.selectedBranchCount?.() ?? 0) < 10) this.addBranch.emit(key);
-        }),
-        action('Sélectionner la branche', (key) => selectWholeBranch(this, key)),
-        $(go.Shape, 'LineH', { stretch: go.Stretch.Horizontal, stroke: '#d1d5db', margin: new go.Margin(3, 4, 3, 4) }),
-        action('Copier', (key) => copyBranch(this, key)),
-        action('Coller', (key) => pasteBranch(this, key), () => branchClipboard !== null),
-        action('Couper', (key) => cutBranch(this, key))
-      );
+    let nearest: go.Node | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    diagram.nodes.each((node: go.Node) => {
+      if ((node.data as any)?.category !== 'BRANCH') return;
+      const center = node.actualBounds.center;
+      const distance = Math.hypot(center.x - docPoint.x, center.y - docPoint.y);
+      if (distance <= 18 && distance < nearestDistance) {
+        nearest = node;
+        nearestDistance = distance;
+      }
+    });
+    return nearest;
+  };
+
+  const showDomMenu = (component: any, node: go.Node, event: MouseEvent): void => {
+    removeDomMenu();
+
+    const key = node.data?.key as string | undefined;
+    if (!key) return;
+
+    node.isSelected = true;
+    component.selectBranchSource?.(key);
+
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    menu.style.position = 'fixed';
+    menu.style.left = `${event.clientX}px`;
+    menu.style.top = `${event.clientY}px`;
+    menu.style.zIndex = '100000';
+    menu.style.minWidth = '190px';
+    menu.style.padding = '4px 0';
+    menu.style.background = '#ffffff';
+    menu.style.border = '1px solid #cbd5e1';
+    menu.style.borderRadius = '4px';
+    menu.style.boxShadow = '0 8px 24px rgba(15,23,42,.18)';
+    menu.style.font = '12px Arial, sans-serif';
+    menu.style.color = '#111827';
+
+    const addItem = (label: string, handler: () => void, enabled = true): void => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.disabled = !enabled;
+      button.style.display = 'block';
+      button.style.width = '100%';
+      button.style.padding = '7px 12px';
+      button.style.border = '0';
+      button.style.background = 'transparent';
+      button.style.textAlign = 'left';
+      button.style.font = 'inherit';
+      button.style.color = enabled ? '#111827' : '#94a3b8';
+      button.style.cursor = enabled ? 'pointer' : 'default';
+      if (enabled) {
+        button.addEventListener('mouseenter', () => { button.style.background = '#eef4fb'; });
+        button.addEventListener('mouseleave', () => { button.style.background = 'transparent'; });
+        button.addEventListener('click', (clickEvent) => {
+          clickEvent.preventDefault();
+          clickEvent.stopPropagation();
+          removeDomMenu();
+          handler();
+        });
+      }
+      menu.appendChild(button);
+    };
+
+    addItem('Ajouter une branche', () => {
+      component.selectBranchSource?.(key);
+      if ((component.selectedBranchCount?.() ?? 0) < 10) component.addBranch.emit(key);
+    }, (component.selectedBranchCount?.() ?? 0) < 10);
+    addItem('Sélectionner la branche', () => selectWholeBranch(component, key));
+
+    const separator = document.createElement('div');
+    separator.style.height = '1px';
+    separator.style.margin = '4px 0';
+    separator.style.background = '#e5e7eb';
+    menu.appendChild(separator);
+
+    addItem('Copier', () => { copyBranch(component, key); });
+    addItem('Coller', () => pasteBranch(component, key), branchClipboard !== null);
+    addItem('Couper', () => cutBranch(component, key));
+
+    document.body.appendChild(menu);
+    activeDomMenu = menu;
+
+    requestAnimationFrame(() => {
+      const bounds = menu.getBoundingClientRect();
+      if (bounds.right > window.innerWidth - 4) menu.style.left = `${Math.max(4, window.innerWidth - bounds.width - 4)}px`;
+      if (bounds.bottom > window.innerHeight - 4) menu.style.top = `${Math.max(4, window.innerHeight - bounds.height - 4)}px`;
+    });
+  };
+
+  prototype.createDiagram = function(): void {
+    originalCreateDiagram.call(this);
+    const div = this.diagramDiv?.nativeElement as HTMLDivElement | undefined;
+    if (!div || this.__eventTreeBranchContextListener) return;
+
+    const contextListener = (event: MouseEvent): void => {
+      const branchNode = findBranchAtEvent(this, event);
+      if (!branchNode) {
+        removeDomMenu();
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      showDomMenu(this, branchNode, event);
+    };
+    const dismissListener = (event: MouseEvent): void => {
+      if (activeDomMenu && !activeDomMenu.contains(event.target as Node)) removeDomMenu();
+    };
+
+    this.__eventTreeBranchContextListener = contextListener;
+    this.__eventTreeBranchContextDismissListener = dismissListener;
+    div.addEventListener('contextmenu', contextListener, true);
+    document.addEventListener('mousedown', dismissListener, true);
+  };
+
+  prototype.ngOnDestroy = function(): void {
+    const div = this.diagramDiv?.nativeElement as HTMLDivElement | undefined;
+    if (div && this.__eventTreeBranchContextListener) {
+      div.removeEventListener('contextmenu', this.__eventTreeBranchContextListener, true);
+    }
+    if (this.__eventTreeBranchContextDismissListener) {
+      document.removeEventListener('mousedown', this.__eventTreeBranchContextDismissListener, true);
+    }
+    removeDomMenu();
+    originalDestroy.call(this);
   };
 }
