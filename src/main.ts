@@ -7,6 +7,7 @@ import { installEventTreeSequenceSelectionPatch } from './app/gojs/event-tree/ev
 import { installEventTreeResultsResizePatch } from './app/gojs/event-tree/event-tree-results-resize.patch';
 import { installEventTreeTagPalettePatch } from './app/gojs/event-tree/event-tree-tag-palette.patch';
 import { installEventTreeBrowserWidthPatch } from './app/features/event-tree/event-tree-browser-width.patch';
+import { installEventTreeViewportPatch } from './app/gojs/event-tree/event-tree-viewport.patch';
 
 installEventTreeDotBehaviorPatch();
 installEventTreeHeaderDragPatch();
@@ -14,6 +15,7 @@ installEventTreeSequenceSelectionPatch();
 installEventTreeResultsResizePatch();
 installEventTreeTagPalettePatch();
 installEventTreeBrowserWidthPatch();
+installEventTreeViewportPatch();
 
 bootstrapApplication(AppComponent, appConfig).catch((error: unknown) => {
   console.error('NextPSA bootstrap failed', error);
