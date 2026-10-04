@@ -204,8 +204,10 @@ export function installEventTreeBranchContextMenuPatch(): void {
         }),
         {
           click: (_event: go.InputEvent, button: go.GraphObject) => {
-            const adorned = button.part?.adornedPart as go.Node | null;
-            const key = adorned?.data?.key as string | undefined;
+            const adornment = button.part as go.Adornment | null;
+            const adorned = adornment?.adornedPart as go.Node | null;
+            if (!adorned) return;
+            const key = adorned.data?.key as string | undefined;
             if (!key) return;
             adorned.isSelected = true;
             handler(key);
