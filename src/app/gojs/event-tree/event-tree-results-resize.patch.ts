@@ -16,7 +16,7 @@ interface ResultResizeMetrics {
 
 const MIN_RESULT_WIDTH = 260;
 const MIN_TREE_WIDTH = 280;
-const RESIZER_HIT_WIDTH = 12;
+const RESIZER_HIT_WIDTH = 16;
 
 export function installEventTreeResultsResizePatch(): void {
   const prototype = EventTreeEditorComponent.prototype as any;
@@ -85,6 +85,14 @@ export function installEventTreeResultsResizePatch(): void {
     const diagram = this.diagram as go.Diagram | undefined;
     if (!diagram) return;
 
+    const sequenceCount = Math.max(
+      1,
+      (this.model?.nodes ?? []).filter((node: { category?: string }) => node.category === 'SEQUENCE').length
+    );
+    const contentHeight = metrics.headerHeight + sequenceCount * metrics.sequenceRowHeight;
+    const viewportHeight = Math.max(1, diagram.div?.clientHeight ?? contentHeight);
+    const handleHeight = Math.max(contentHeight, viewportHeight);
+
     const $ = go.GraphObject.make;
     diagram.nodeTemplateMap.add('RESULT_RESIZER',
       $(go.Node, 'Spot',
@@ -105,15 +113,15 @@ export function installEventTreeResultsResizePatch(): void {
         new go.Binding('location', 'loc', go.Point.parse),
         $(go.Shape, 'Rectangle', {
           width: RESIZER_HIT_WIDTH,
-          height: 10000,
+          height: handleHeight,
           fill: 'rgba(37,99,235,0.001)',
           stroke: null
         }),
         $(go.Shape, 'LineV', {
-          height: 10000,
-          stroke: '#94a3b8',
+          height: handleHeight,
+          stroke: '#64748b',
           strokeWidth: 1,
-          opacity: 0.35
+          opacity: 0.55
         })
       )
     );
