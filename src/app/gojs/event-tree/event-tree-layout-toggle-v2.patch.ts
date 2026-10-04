@@ -4,14 +4,11 @@ import { EventTreeEditorComponent } from './event-tree-editor.component';
 type EventTreeLayoutMode = 'STANDARD' | 'CENTERED';
 
 const SAVED_CATEGORIES = new Set(['START_POINT', 'FE_POINT', 'BRANCH', 'ANCHOR']);
-const SYNTHETIC_MARKER = '__etCenteredSynthetic';
-const RESULT_RAIL_GUTTER = 26;
+const CENTER_MAIN_RESULT = '__etCenteredMainResult';
 
-interface SequenceGeometry {
+interface SequenceRow {
   key: string;
   centerY: number;
-  parentSequenceKey?: string;
-  sequenceNo?: number;
 }
 
 export function installEventTreeLayoutToggleV2Patch(): void {
@@ -64,103 +61,39 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     });
   };
 
-  const getSequenceData = (component: any): {
-    rootKey: string | null;
-    rows: Map<string, SequenceGeometry>;
-    pathY: Map<string, number>;
-  } => {
+  const sequenceRows = (component: any): Map<string, SequenceRow> => {
     const diagram = component.diagram as go.Diagram | undefined;
-    if (!diagram) return { rootKey: null, rows: new Map(), pathY: new Map() };
+    const rows = new Map<string, SequenceRow>();
+    if (!diagram) return rows;
 
     const rowHeight = Number(component.__eventTreeViewportMetrics?.sequenceRowHeight ?? 34);
-    const rows = new Map<string, SequenceGeometry>();
-
     diagram.nodes.each((node: go.Node) => {
       const data = node.data as any;
       if (data?.category !== 'SEQUENCE') return;
       rows.set(String(data.key), {
         key: String(data.key),
-        centerY: node.location.y + rowHeight / 2,
-        parentSequenceKey: data.parentSequenceKey ? String(data.parentSequenceKey) : undefined,
-        sequenceNo: Number(data.sequenceNo ?? 0)
+        centerY: node.location.y + rowHeight / 2
       });
     });
-
-    const children = new Map<string, string[]>();
-    rows.forEach((sequence) => {
-      const parent = sequence.parentSequenceKey;
-      if (!parent || !rows.has(parent)) return;
-      const list = children.get(parent) ?? [];
-      list.push(sequence.key);
-      children.set(parent, list);
-    });
-
-    children.forEach((keys) => {
-      keys.sort((a, b) => (rows.get(a)?.centerY ?? 0) - (rows.get(b)?.centerY ?? 0));
-    });
-
-    const roots = [...rows.values()]
-      .filter((sequence) => !sequence.parentSequenceKey || !rows.has(sequence.parentSequenceKey))
-      .sort((a, b) => {
-        const noDiff = (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0);
-        return noDiff || a.centerY - b.centerY;
-      });
-
-    const pathY = new Map<string, number>();
-    const spanMemo = new Map<string, { min: number; max: number }>();
-
-    const buildSpan = (key: string, stack = new Set<string>()): { min: number; max: number } => {
-      const memo = spanMemo.get(key);
-      if (memo) return memo;
-      const own = rows.get(key);
-      if (!own) return { min: 0, max: 0 };
-      if (stack.has(key)) return { min: own.centerY, max: own.centerY };
-
-      const nextStack = new Set(stack);
-      nextStack.add(key);
-
-      let min = own.centerY;
-      let max = own.centerY;
-      (children.get(key) ?? []).forEach((childKey) => {
-        const childSpan = buildSpan(childKey, nextStack);
-        min = Math.min(min, childSpan.min);
-        max = Math.max(max, childSpan.max);
-      });
-
-      const span = { min, max };
-      spanMemo.set(key, span);
-      pathY.set(key, (min + max) / 2);
-      return span;
-    };
-
-    roots.forEach((root) => buildSpan(root.key));
-    rows.forEach((_row, key) => {
-      if (!pathY.has(key)) buildSpan(key);
-    });
-
-    return { rootKey: roots[0]?.key ?? null, rows, pathY };
+    return rows;
   };
 
-  const findResultX = (diagram: go.Diagram): number | null => {
-    const resultHeader = diagram.findNodeForKey('RESULT-HEADER');
-    if (resultHeader) return resultHeader.location.x;
-    let resultX: number | null = null;
-    diagram.nodes.each((node: go.Node) => {
-      if ((node.data as any)?.category === 'SEQUENCE' && resultX === null) resultX = node.location.x;
-    });
-    return resultX;
+  const mainSequenceKey = (component: any, rows: Map<string, SequenceRow>): string | null => {
+    if (rows.has('S1')) return 'S1';
+    const first = (component.model?.nodes ?? [])
+      .filter((node: any) => node.category === 'SEQUENCE')
+      .sort((a: any, b: any) => Number(a.sequenceNo ?? 0) - Number(b.sequenceNo ?? 0))[0];
+    return first?.key ? String(first.key) : ([...rows.keys()][0] ?? null);
   };
 
-  const removeSyntheticResultGeometry = (diagram: go.Diagram): void => {
+  const removeCenteredMainResult = (diagram: go.Diagram): void => {
     const model = diagram.model as go.GraphLinksModel;
-    const links = [...(model.linkDataArray as any[])];
-    links.filter((data) => Boolean(data?.[SYNTHETIC_MARKER])).forEach((data) => model.removeLinkData(data));
-
-    const nodes = [...(model.nodeDataArray as any[])];
-    nodes.filter((data) => Boolean(data?.[SYNTHETIC_MARKER])).forEach((data) => model.removeNodeData(data));
+    [...(model.linkDataArray as any[])]
+      .filter((data) => Boolean(data?.[CENTER_MAIN_RESULT]))
+      .forEach((data) => model.removeLinkData(data));
   };
 
-  const applyNormalRouting = (diagram: go.Diagram): void => {
+  const applyStandardRouting = (diagram: go.Diagram): void => {
     diagram.links.each((link: go.Link) => {
       link.routing = go.Routing.Normal;
       link.curve = go.Curve.None;
@@ -169,62 +102,17 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     });
   };
 
-  const routeResultsThroughRail = (
-    component: any,
-    rootKey: string,
-    rows: Map<string, SequenceGeometry>,
-    pathY: Map<string, number>
-  ): void => {
-    const diagram = component.diagram as go.Diagram | undefined;
-    if (!diagram) return;
-    const model = diagram.model as go.GraphLinksModel;
-    const resultX = findResultX(diagram);
-    if (!Number.isFinite(resultX)) return;
-
-    const railX = Math.max(0, Number(resultX) - RESULT_RAIL_GUTTER);
-    const linkData = model.linkDataArray as any[];
-
-    rows.forEach((row, sequenceKey) => {
-      const pathCenter = pathY.get(sequenceKey) ?? row.centerY;
-      let sourceKey: string | null = null;
-
-      if (sequenceKey === rootKey) {
-        sourceKey = '__BASELINE_END__';
-      } else {
-        const directResult = linkData.find((data) =>
-          data?.to === sequenceKey && !data?.[SYNTHETIC_MARKER]
-        );
-        if (directResult) {
-          sourceKey = String(directResult.from);
-          model.removeLinkData(directResult);
-        }
-      }
-
-      if (!sourceKey) return;
-
-      const pathAnchorKey = `__CENTER-RAIL-PATH-${sequenceKey}`;
-      const rowAnchorKey = `__CENTER-RAIL-ROW-${sequenceKey}`;
-      model.addNodeData({
-        key: pathAnchorKey,
-        category: 'ANCHOR',
-        loc: `${railX} ${pathCenter}`,
-        [SYNTHETIC_MARKER]: true
-      });
-      model.addNodeData({
-        key: rowAnchorKey,
-        category: 'ANCHOR',
-        loc: `${railX} ${row.centerY}`,
-        [SYNTHETIC_MARKER]: true
-      });
-      model.addLinkData({ from: sourceKey, to: pathAnchorKey, [SYNTHETIC_MARKER]: true });
-      if (Math.abs(pathCenter - row.centerY) > 0.1) {
-        model.addLinkData({ from: pathAnchorKey, to: rowAnchorKey, [SYNTHETIC_MARKER]: true });
-      }
-      model.addLinkData({
-        from: Math.abs(pathCenter - row.centerY) > 0.1 ? rowAnchorKey : pathAnchorKey,
-        to: sequenceKey,
-        [SYNTHETIC_MARKER]: true
-      });
+  const applyCenteredRouting = (diagram: go.Diagram): void => {
+    diagram.links.each((link: go.Link) => {
+      // A centered Event Tree is deliberately orthogonal: horizontal path rows
+      // and vertical drops/raises only. This prevents diagonals and crossings
+      // caused by automatic normal routing when path rows are repositioned.
+      link.routing = go.Routing.Orthogonal;
+      link.curve = go.Curve.None;
+      link.corner = 0;
+      link.fromEndSegmentLength = 0;
+      link.toEndSegmentLength = 0;
+      link.invalidateRoute();
     });
   };
 
@@ -232,51 +120,66 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     const diagram = component.diagram as go.Diagram | undefined;
     if (!diagram) return;
 
-    const { rootKey, rows, pathY } = getSequenceData(component);
-    if (!rootKey || !rows.size || !pathY.size) return;
-    const mainY = pathY.get(rootKey);
-    if (!Number.isFinite(mainY)) return;
+    const rows = sequenceRows(component);
+    if (!rows.size) return;
 
-    const resultX = findResultX(diagram);
-    const railX = Number.isFinite(resultX) ? Math.max(0, Number(resultX) - RESULT_RAIL_GUTTER) : null;
+    const rowYs = [...rows.values()].map((row) => row.centerY).sort((a, b) => a - b);
+    const centerY = (rowYs[0] + rowYs[rowYs.length - 1]) / 2;
+    const rootKey = mainSequenceKey(component, rows);
 
+    // Main Event Tree spine: one straight horizontal line through the centre.
     diagram.nodes.each((node: go.Node) => {
       const data = node.data as any;
       const category = data?.category;
       const key = String(data?.key ?? '');
 
-      if (category === 'START_POINT' || category === 'FE_POINT') {
-        node.location = new go.Point(node.location.x, mainY!);
+      if (category === 'START_POINT' || category === 'FE_POINT' || key === '__BASELINE_END__') {
+        node.location = new go.Point(node.location.x, centerY);
         return;
       }
 
-      if (key === '__BASELINE_END__') {
-        node.location = new go.Point(railX ?? node.location.x, mainY!);
-        return;
-      }
-
+      // Every branch path remains on the SAME horizontal row as its sequence.
+      // Therefore all branch/result lines are parallel and cannot weave across
+      // each other between Function Event columns.
       if (category === 'BRANCH') {
         const sequenceKey = data.pathSequenceKey ? String(data.pathSequenceKey) : '';
-        const y = pathY.get(sequenceKey);
-        if (Number.isFinite(y)) node.location = new go.Point(node.location.x, y!);
+        const row = rows.get(sequenceKey);
+        if (row) node.location = new go.Point(node.location.x, row.centerY);
         return;
       }
 
-      if (category !== 'ANCHOR' || !key.startsWith('__BEND-')) return;
-      const target = node.findLinksOutOf().first()?.toNode;
-      if (!target) return;
-      const targetData = target.data as any;
-      const targetSequenceKey = targetData?.category === 'SEQUENCE'
-        ? String(targetData.key)
-        : targetData?.pathSequenceKey
-          ? String(targetData.pathSequenceKey)
-          : '';
-      const targetPathY = pathY.get(targetSequenceKey);
-      if (Number.isFinite(targetPathY)) node.location = new go.Point(node.location.x, targetPathY!);
+      // Existing bend anchors are locked to the row of their downstream path.
+      if (category === 'ANCHOR' && key.startsWith('__BEND-')) {
+        const target = node.findLinksOutOf().first()?.toNode;
+        const targetData = target?.data as any;
+        const sequenceKey = targetData?.category === 'SEQUENCE'
+          ? String(targetData.key)
+          : targetData?.pathSequenceKey
+            ? String(targetData.pathSequenceKey)
+            : '';
+        const row = rows.get(sequenceKey);
+        if (row) node.location = new go.Point(node.location.x, row.centerY);
+      }
     });
 
-    routeResultsThroughRail(component, rootKey, rows, pathY);
-    applyNormalRouting(diagram);
+    // The standard model has no explicit visible result leg for the main path.
+    // Add one runtime-only link. Orthogonal routing gives one clean vertical turn
+    // at the result boundary and a final horizontal segment parallel to all rows.
+    if (rootKey) {
+      const model = diagram.model as go.GraphLinksModel;
+      const alreadyLinked = (model.linkDataArray as any[]).some(
+        (data) => data?.from === '__BASELINE_END__' && data?.to === rootKey
+      );
+      if (!alreadyLinked) {
+        model.addLinkData({
+          from: '__BASELINE_END__',
+          to: rootKey,
+          [CENTER_MAIN_RESULT]: true
+        });
+      }
+    }
+
+    applyCenteredRouting(diagram);
     component.lockViewport?.();
   };
 
@@ -284,13 +187,19 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     const metrics = component.__eventTreeViewportMetrics;
     if (!metrics) return;
 
+    // Rebuild from the canonical ET geometry every time the mode changes.
+    // This avoids accumulating transformations from earlier centered layouts.
     originalApplyModel.call(component, metrics);
     saveBaseGeometry(component);
-    removeSyntheticResultGeometry(component.diagram as go.Diagram);
+
+    const diagram = component.diagram as go.Diagram | undefined;
+    if (!diagram) return;
+    removeCenteredMainResult(diagram);
 
     if (getMode(component) === 'CENTERED') applyCenteredGeometry(component);
     else {
-      applyNormalRouting(component.diagram as go.Diagram);
+      restoreBaseGeometry(component);
+      applyStandardRouting(diagram);
       component.lockViewport?.();
     }
     component.updateDotVisuals?.();
@@ -308,9 +217,10 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     controls.style.gap = '7px';
 
     const makeButton = (
+      label: string,
       title: string,
       aria: string,
-      svgPath: string,
+      svg: string,
       mode: EventTreeLayoutMode
     ): HTMLButtonElement => {
       const button = document.createElement('button');
@@ -318,12 +228,12 @@ export function installEventTreeLayoutToggleV2Patch(): void {
       button.title = title;
       button.setAttribute('aria-label', aria);
       button.setAttribute('aria-pressed', 'false');
-      button.style.minWidth = '44px';
-      button.style.padding = '0 10px';
+      // Keep the exact toolbar button box used by Fit / + Branch. Only add an
+      // icon+text arrangement inside so the purpose is immediately readable.
       button.style.display = 'inline-flex';
       button.style.alignItems = 'center';
-      button.style.justifyContent = 'center';
-      button.innerHTML = `<svg viewBox="0 0 28 18" width="24" height="16" aria-hidden="true" style="display:block"><path d="${svgPath}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+      button.style.gap = '6px';
+      button.innerHTML = `${svg}<span>${label}</span>`;
       button.addEventListener('click', () => {
         component.__eventTreeLayoutModeV2 = mode;
         updateButtons(component);
@@ -332,19 +242,28 @@ export function installEventTreeLayoutToggleV2Patch(): void {
       return button;
     };
 
-    // Standard icon: main ET spine on top with branches descending.
+    const standardIcon = `
+      <svg viewBox="0 0 24 16" width="21" height="14" aria-hidden="true" style="display:block">
+        <path d="M2 3H22 M7 3V8H22 M13 3V13H22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>`;
+
+    const centeredIcon = `
+      <svg viewBox="0 0 24 16" width="21" height="14" aria-hidden="true" style="display:block">
+        <path d="M2 8H22 M7 8V3H22 M13 8V13H22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>`;
+
     const standard = makeButton(
+      'Standard',
       'Disposition ET standard',
       'Afficher l’Event Tree avec la ligne principale en haut',
-      'M2 4H26 M8 4V9H26 M14 4V14H26',
+      standardIcon,
       'STANDARD'
     );
-
-    // Centered icon: main ET spine in the middle with branches above and below.
     const centered = makeButton(
+      'Centré',
       'Disposition ET centrée',
-      'Centrer la ligne principale et répartir les branches au-dessus et au-dessous',
-      'M2 9H26 M9 9V3H26 M15 9V15H26',
+      'Afficher l’Event Tree avec la ligne principale centrée',
+      centeredIcon,
       'CENTERED'
     );
 
@@ -363,13 +282,14 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     this.__eventTreeViewportMetrics = metrics;
     originalApplyModel.call(this, metrics);
     saveBaseGeometry(this);
+
     const diagram = this.diagram as go.Diagram | undefined;
     if (!diagram) return;
 
     requestAnimationFrame(() => {
-      removeSyntheticResultGeometry(diagram);
+      removeCenteredMainResult(diagram);
       if (getMode(this) === 'CENTERED') applyCenteredGeometry(this);
-      else applyNormalRouting(diagram);
+      else applyStandardRouting(diagram);
     });
   };
 
@@ -383,7 +303,7 @@ export function installEventTreeLayoutToggleV2Patch(): void {
 
   prototype.ngOnDestroy = function(): void {
     const diagram = this.diagram as go.Diagram | undefined;
-    if (diagram) removeSyntheticResultGeometry(diagram);
+    if (diagram) removeCenteredMainResult(diagram);
     (this.__eventTreeLayoutControlsV2 as HTMLElement | undefined)?.remove();
     this.__eventTreeLayoutControlsV2 = null;
     this.__eventTreeLayoutLeftButton = null;
