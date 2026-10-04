@@ -4,6 +4,13 @@ import { Router } from '@angular/router';
 import { EventTreeEditorComponent } from '../../gojs/event-tree/event-tree-editor.component';
 import { EventTreeRepository } from './event-tree.repository';
 import { EventTreeModel } from './event-tree.models';
+import { reorderFunctionEvent } from './event-tree-reorder';
+
+interface FunctionEventReorderDetail {
+  treeId: string;
+  fromIndex: number;
+  toIndex: number;
+}
 
 @Component({
   selector: 'app-event-tree-page',
@@ -167,6 +174,15 @@ export class EventTreePageComponent {
 
   addBranch(fromKey: string): void {
     this.repository.addBranch(this.repository.eventTree().id, fromKey);
+    requestAnimationFrame(() => this.eventTreeEditor?.refreshLayout());
+  }
+
+  @HostListener('window:nextpsa-et-reorder-function-event', ['$event'])
+  onFunctionEventReorder(event: Event): void {
+    const detail = (event as CustomEvent<FunctionEventReorderDetail>).detail;
+    if (!detail || detail.treeId !== this.repository.eventTree().id) return;
+
+    reorderFunctionEvent(this.repository, detail.treeId, detail.fromIndex, detail.toIndex);
     requestAnimationFrame(() => this.eventTreeEditor?.refreshLayout());
   }
 
