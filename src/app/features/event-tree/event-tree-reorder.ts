@@ -1,9 +1,5 @@
 import { EventTreeRepository } from './event-tree.repository';
 
-interface RepositoryWithHistory extends EventTreeRepository {
-  saveHistory?: () => void;
-}
-
 export function reorderFunctionEvent(
   repository: EventTreeRepository,
   treeId: string,
@@ -20,7 +16,7 @@ export function reorderFunctionEvent(
     fromIndex === toIndex
   ) return;
 
-  const historyRepository = repository as RepositoryWithHistory;
+  const historyRepository = repository as unknown as { saveHistory?: () => void };
   historyRepository.saveHistory?.();
 
   repository.eventTrees.update((trees) => trees.map((tree) => {
