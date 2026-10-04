@@ -3,14 +3,8 @@ import { EventTreeEditorComponent } from './event-tree-editor.component';
 
 type EventTreeLayoutMode = 'STANDARD' | 'CENTERED';
 
-const BODY_CATEGORIES = new Set([
-  'START_POINT',
-  'FE_POINT',
-  'BRANCH',
-  'ANCHOR',
-  'SEQUENCE',
-  'RESULT_RESIZER'
-]);
+const MOVABLE_CATEGORIES = new Set(['START_POINT', 'FE_POINT', 'BRANCH', 'ANCHOR']);
+const MAIN_SEQUENCE_KEY = 'S1';
 
 export function installEventTreeLayoutToggleV2Patch(): void {
   const prototype = EventTreeEditorComponent.prototype as any;
@@ -26,7 +20,7 @@ export function installEventTreeLayoutToggleV2Patch(): void {
 
   const updateButtons = (component: any): void => {
     const mode = getMode(component);
-    const left = component.__eventTreeLayoutLeftButton as HTMLButtonElement | undefined;
+    const standard = component.__eventTreeLayoutLeftButton as HTMLButtonElement | undefined;
     const centered = component.__eventTreeLayoutCenteredButtonV2 as HTMLButtonElement | undefined;
 
     const setState = (button: HTMLButtonElement | undefined, active: boolean): void => {
@@ -37,7 +31,7 @@ export function installEventTreeLayoutToggleV2Patch(): void {
       button.setAttribute('aria-pressed', active ? 'true' : 'false');
     };
 
-    setState(left, mode === 'STANDARD');
+    setState(standard, mode === 'STANDARD');
     setState(centered, mode === 'CENTERED');
   };
 
@@ -47,61 +41,126 @@ export function installEventTreeLayoutToggleV2Patch(): void {
 
     diagram.nodes.each((node: go.Node) => {
       const data = node.data as any;
-      if (!BODY_CATEGORIES.has(data?.category)) return;
+      if (!MOVABLE_CATEGORIES.has(data?.category)) return;
       const baseLoc = data?.__etBaseLoc as string | undefined;
-      if (!baseLoc) return;
-      node.location = go.Point.parse(baseLoc);
+      if (baseLoc) node.location = go.Point.parse(baseLoc);
     });
   };
 
-  const applyBodyCentering = (component: any): void => {
+  const sequenceCenters = (component: any): Map<string, number> => {
     const diagram = component.diagram as go.Diagram | undefined;
-    const div = component.diagramDiv?.nativeElement as HTMLDivElement | undefined;
-    const metrics = component.__eventTreeViewportMetrics as { headerHeight?: number } | undefined;
-    if (!diagram || !div) return;
+    const result = new Map<string, number>();
+    if (!diagram) return result;
+
+    const rowHeight = Number(component.__eventTreeViewportMetrics?.sequenceRowHeight ?? 34);
+    diagram.nodes.each((node: go.Node) => {
+      const data = node.data as any;
+      if (data?.category !== 'SEQUENCE') return;
+      result.set(String(data.key), node.location.y + rowHeight / 2);
+    });
+    return result;
+  };
+
+  const reachableSequences = (component: any, sourceKey: string, centers: Map<string, number>): string[] => {
+    const links = component.model?.links ?? [];
+    const outgoing = new Map<string, string[]>();
+    links.forEach((link: any) => {
+      const list = outgoing.get(String(link.from)) ?? [];
+      list.push(String(link.to));
+      outgoing.set(String(link.from), list);
+    });
+
+    const found = new Set<string>();
+    const visited = new Set<string>();
+    const visit = (key: string, depth: number): void => {
+      if (depth > 100 || visited.has(key)) return;
+      visited.add(key);
+      if (centers.has(key)) {
+        found.add(key);
+        return;
+      }
+      (outgoing.get(key) ?? []).forEach((next) => visit(next, depth + 1));
+    };
+    visit(sourceKey, 0);
+
+    if (!found.size) {
+      const branch = (component.model?.nodes ?? []).find(
+        (node: any) => node.category === 'BRANCH' && node.key === sourceKey
+      );
+      if (branch?.pathSequenceKey && centers.has(branch.pathSequenceKey)) {
+        found.add(branch.pathSequenceKey);
+      }
+    }
+
+    return [...found];
+  };
+
+  const averageY = (keys: string[], centers: Map<string, number>, fallback: number): number => {
+    const ys = keys.map((key) => centers.get(key)).filter((value): value is number => Number.isFinite(value));
+    if (!ys.length) return fallback;
+    return ys.reduce((sum, value) => sum + value, 0) / ys.length;
+  };
+
+  const applyCenteredGeometry = (component: any): void => {
+    const diagram = component.diagram as go.Diagram | undefined;
+    if (!diagram) return;
 
     restoreBaseLocations(component);
-
     if (getMode(component) !== 'CENTERED') {
-      component.__eventTreeBodyCenterOffset = 0;
+      diagram.links.each((link: go.Link) => link.invalidateRoute());
       component.lockViewport?.();
       return;
     }
 
-    const headerHeight = metrics?.headerHeight ?? 82;
-    const bodyNodes: go.Node[] = [];
+    const centers = sequenceCenters(component);
+    if (!centers.size) return;
+
+    const allSequenceKeys = [...centers.keys()];
+    const mainKeys = centers.has(MAIN_SEQUENCE_KEY)
+      ? [MAIN_SEQUENCE_KEY, ...((component.model?.nodes ?? [])
+          .filter((node: any) => node.category === 'SEQUENCE' && node.key !== MAIN_SEQUENCE_KEY)
+          .map((node: any) => String(node.key)))]
+      : allSequenceKeys;
+    const rootY = averageY(mainKeys, centers, [...centers.values()][0]);
+
     diagram.nodes.each((node: go.Node) => {
-      const category = (node.data as any)?.category;
-      if (BODY_CATEGORIES.has(category) && category !== 'RESULT_RESIZER') bodyNodes.push(node);
+      const data = node.data as any;
+      const category = data?.category;
+      if (category === 'START_POINT' || category === 'FE_POINT') {
+        node.location = new go.Point(node.location.x, rootY);
+        return;
+      }
+
+      if (category === 'BRANCH') {
+        const descendants = reachableSequences(component, String(data.key), centers);
+        const y = averageY(descendants, centers, node.location.y);
+        node.location = new go.Point(node.location.x, y);
+      }
     });
-    if (!bodyNodes.length) return;
 
-    let top = Number.POSITIVE_INFINITY;
-    let bottom = Number.NEGATIVE_INFINITY;
-    bodyNodes.forEach((node) => {
-      top = Math.min(top, node.actualBounds.top);
-      bottom = Math.max(bottom, node.actualBounds.bottom);
+    // Baseline end follows the centered main path. Synthetic branch bends stay at
+    // the target Y so branch geometry remains orthogonal and readable.
+    diagram.nodes.each((node: go.Node) => {
+      const data = node.data as any;
+      if (data?.category !== 'ANCHOR') return;
+      const key = String(data.key ?? '');
+      if (key === '__BASELINE_END__') {
+        node.location = new go.Point(node.location.x, rootY);
+        return;
+      }
+      if (!key.startsWith('__BEND-')) return;
+
+      const outgoing = node.findLinksOutOf().first();
+      const target = outgoing?.toNode;
+      if (!target) return;
+      const targetData = target.data as any;
+      const targetY = targetData?.category === 'SEQUENCE'
+        ? (centers.get(String(targetData.key)) ?? target.actualBounds.center.y)
+        : target.location.y;
+      node.location = new go.Point(node.location.x, targetY);
     });
-    if (!Number.isFinite(top) || !Number.isFinite(bottom)) return;
 
-    const scale = Math.max(0.25, diagram.scale || 1);
-    const availableBodyHeight = Math.max(0, (div.clientHeight - headerHeight) / scale);
-    const bodyHeight = Math.max(0, bottom - top);
-
-    // Only the body is centered. IE, FE and the consequence header remain fixed.
-    // Large ETs stay top-aligned so the dedicated body scrollbar continues to
-    // expose every branch and consequence row without hiding content above.
-    const offset = bodyHeight + 8 < availableBodyHeight
-      ? Math.max(0, (availableBodyHeight - bodyHeight) / 2 - Math.max(0, top - headerHeight))
-      : 0;
-
-    component.__eventTreeBodyCenterOffset = offset;
-    if (offset > 0.01) {
-      bodyNodes.forEach((node) => {
-        node.location = new go.Point(node.location.x, node.location.y + offset);
-      });
-    }
-
+    diagram.links.each((link: go.Link) => link.invalidateRoute());
     component.lockViewport?.();
   };
 
@@ -110,7 +169,6 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     const toolbar = shell?.querySelector?.('.toolbar') as HTMLElement | null;
     if (!toolbar || component.__eventTreeLayoutControlsV2) return;
 
-    // Replace the first implementation instead of rendering duplicate controls.
     (component.__eventTreeLayoutControls as HTMLElement | undefined)?.remove();
     component.__eventTreeLayoutControls = null;
 
@@ -119,59 +177,46 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     Object.assign(controls.style, {
       display: 'inline-flex',
       alignItems: 'center',
-      gap: '4px',
-      marginLeft: '2px'
+      gap: '7px',
+      marginLeft: '0'
     });
 
-    const makeButton = (
-      title: string,
-      aria: string,
-      path: string,
-      mode: EventTreeLayoutMode
-    ): HTMLButtonElement => {
+    const makeButton = (title: string, aria: string, mode: EventTreeLayoutMode): HTMLButtonElement => {
       const button = document.createElement('button');
       button.type = 'button';
       button.title = title;
       button.setAttribute('aria-label', aria);
-      Object.assign(button.style, {
-        width: '34px',
-        minWidth: '34px',
-        height: '31px',
-        padding: '0',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: '7px'
-      });
-      // Exact same glyphs as the two Fault Tree layout buttons.
-      button.innerHTML = `<svg viewBox="0 0 26 18" width="24" height="17" aria-hidden="true"><path d="${path}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+      button.style.padding = '0 11px';
+      button.style.display = 'inline-flex';
+      button.style.alignItems = 'center';
+      button.style.justifyContent = 'center';
+      button.style.minWidth = '42px';
+      button.innerHTML = '<svg viewBox="0 0 26 18" width="22" height="16" aria-hidden="true"><path d="M6 2v14M6 3h14M6 9h10M6 15h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
       button.addEventListener('click', () => {
         component.__eventTreeLayoutModeV2 = mode;
         updateButtons(component);
-        requestAnimationFrame(() => applyBodyCentering(component));
+        requestAnimationFrame(() => applyCenteredGeometry(component));
       });
       return button;
     };
 
-    const left = makeButton(
+    const standard = makeButton(
       'Disposition ET actuelle',
       'Garder la disposition actuelle de l’Event Tree',
-      'M5 2v5h16M5 7v9M13 7v9M21 7v9',
       'STANDARD'
     );
     const centered = makeButton(
-      'Centrer l’arbre ET',
-      'Centrer uniquement l’arbre Event Tree',
-      'M13 2v5M4 7h18M4 7v9M13 7v9M22 7v9',
+      'Centrer les branches ET',
+      'Centrer la géométrie des branches Event Tree',
       'CENTERED'
     );
 
-    controls.append(left, centered);
+    controls.append(standard, centered);
     const hint = toolbar.querySelector('.hint');
     toolbar.insertBefore(controls, hint ?? null);
 
     component.__eventTreeLayoutControlsV2 = controls;
-    component.__eventTreeLayoutLeftButton = left;
+    component.__eventTreeLayoutLeftButton = standard;
     component.__eventTreeLayoutCenteredButtonV2 = centered;
     component.__eventTreeLayoutModeV2 ??= 'STANDARD';
     updateButtons(component);
@@ -183,18 +228,18 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     if (diagram) {
       diagram.nodes.each((node: go.Node) => {
         const data = node.data as any;
-        if (!BODY_CATEGORIES.has(data?.category)) return;
+        if (!MOVABLE_CATEGORIES.has(data?.category)) return;
         data.__etBaseLoc = go.Point.stringify(node.location);
       });
     }
-    requestAnimationFrame(() => applyBodyCentering(this));
+    requestAnimationFrame(() => applyCenteredGeometry(this));
   };
 
   prototype.ngAfterViewInit = function(): void {
     originalAfterViewInit.call(this);
     requestAnimationFrame(() => {
       injectButtons(this);
-      applyBodyCentering(this);
+      applyCenteredGeometry(this);
     });
   };
 
