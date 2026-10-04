@@ -5,11 +5,13 @@ import { installEventTreeDotBehaviorPatch } from './app/gojs/event-tree/event-tr
 import { installEventTreeHeaderDragPatch } from './app/gojs/event-tree/event-tree-header-drag.patch';
 import { installEventTreeSequenceSelectionPatch } from './app/gojs/event-tree/event-tree-sequence-selection.patch';
 import { installEventTreeResultsResizePatch } from './app/gojs/event-tree/event-tree-results-resize.patch';
+import { installEventTreeTagPalettePatch } from './app/gojs/event-tree/event-tree-tag-palette.patch';
 
 installEventTreeDotBehaviorPatch();
 installEventTreeHeaderDragPatch();
 installEventTreeSequenceSelectionPatch();
 installEventTreeResultsResizePatch();
+installEventTreeTagPalettePatch();
 
 bootstrapApplication(AppComponent, appConfig).catch((error: unknown) => {
   console.error('NextPSA bootstrap failed', error);
