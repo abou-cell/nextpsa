@@ -4,6 +4,14 @@ import { EventTreeEditorComponent } from './event-tree-editor.component';
 type EventTreeLayoutMode = 'STANDARD' | 'CENTERED';
 
 const SAVED_CATEGORIES = new Set(['START_POINT', 'FE_POINT', 'BRANCH', 'ANCHOR']);
+const CENTER_RESULT_MARKER = '__etCenteredResult';
+
+interface SequenceGeometry {
+  key: string;
+  centerY: number;
+  parentSequenceKey?: string;
+  sequenceNo?: number;
+}
 
 export function installEventTreeLayoutToggleV2Patch(): void {
   const prototype = EventTreeEditorComponent.prototype as any;
@@ -24,7 +32,7 @@ export function installEventTreeLayoutToggleV2Patch(): void {
 
     const setState = (button: HTMLButtonElement | undefined, active: boolean): void => {
       if (!button) return;
-      button.style.background = active ? '#e8f1ff' : '#ffffff';
+      button.style.background = active ? '#e8f1ff' : '';
       button.style.borderColor = active ? '#3b82f6' : '';
       button.style.color = active ? '#2563eb' : '';
       button.setAttribute('aria-pressed', active ? 'true' : 'false');
@@ -46,49 +54,176 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     });
   };
 
-  const getSequenceCenters = (component: any): number[] => {
+  const removeCenteredResultLink = (diagram: go.Diagram): void => {
+    const model = diagram.model as go.GraphLinksModel;
+    const linkDataArray = [...(model.linkDataArray as any[])];
+    linkDataArray
+      .filter((data) => Boolean(data?.[CENTER_RESULT_MARKER]))
+      .forEach((data) => model.removeLinkData(data));
+  };
+
+  const buildSequenceGeometry = (component: any): {
+    rootKey: string | null;
+    pathY: Map<string, number>;
+  } => {
     const diagram = component.diagram as go.Diagram | undefined;
-    if (!diagram) return [];
+    if (!diagram) return { rootKey: null, pathY: new Map() };
 
     const rowHeight = Number(component.__eventTreeViewportMetrics?.sequenceRowHeight ?? 34);
-    const centers: number[] = [];
+    const sequenceByKey = new Map<string, SequenceGeometry>();
+
     diagram.nodes.each((node: go.Node) => {
       const data = node.data as any;
-      if (data?.category === 'SEQUENCE') centers.push(node.location.y + rowHeight / 2);
+      if (data?.category !== 'SEQUENCE') return;
+      sequenceByKey.set(String(data.key), {
+        key: String(data.key),
+        centerY: node.location.y + rowHeight / 2,
+        parentSequenceKey: data.parentSequenceKey ? String(data.parentSequenceKey) : undefined,
+        sequenceNo: Number(data.sequenceNo ?? 0)
+      });
     });
-    return centers.sort((a, b) => a - b);
+
+    const children = new Map<string, string[]>();
+    sequenceByKey.forEach((sequence) => {
+      if (!sequence.parentSequenceKey || !sequenceByKey.has(sequence.parentSequenceKey)) return;
+      const list = children.get(sequence.parentSequenceKey) ?? [];
+      list.push(sequence.key);
+      children.set(sequence.parentSequenceKey, list);
+    });
+
+    children.forEach((keys) => {
+      keys.sort((a, b) => {
+        const ay = sequenceByKey.get(a)?.centerY ?? 0;
+        const by = sequenceByKey.get(b)?.centerY ?? 0;
+        return ay - by;
+      });
+    });
+
+    const roots = [...sequenceByKey.values()]
+      .filter((sequence) => !sequence.parentSequenceKey || !sequenceByKey.has(sequence.parentSequenceKey))
+      .sort((a, b) => {
+        const noDiff = (a.sequenceNo ?? 0) - (b.sequenceNo ?? 0);
+        return noDiff || a.centerY - b.centerY;
+      });
+
+    const pathY = new Map<string, number>();
+    const spanMemo = new Map<string, { min: number; max: number }>();
+
+    const subtreeSpan = (key: string, stack = new Set<string>()): { min: number; max: number } => {
+      const memo = spanMemo.get(key);
+      if (memo) return memo;
+
+      const own = sequenceByKey.get(key);
+      if (!own) return { min: 0, max: 0 };
+      if (stack.has(key)) return { min: own.centerY, max: own.centerY };
+
+      const nextStack = new Set(stack);
+      nextStack.add(key);
+
+      let min = own.centerY;
+      let max = own.centerY;
+      (children.get(key) ?? []).forEach((childKey) => {
+        const childSpan = subtreeSpan(childKey, nextStack);
+        min = Math.min(min, childSpan.min);
+        max = Math.max(max, childSpan.max);
+      });
+
+      const span = { min, max };
+      spanMemo.set(key, span);
+      pathY.set(key, (min + max) / 2);
+      return span;
+    };
+
+    roots.forEach((root) => subtreeSpan(root.key));
+    sequenceByKey.forEach((_sequence, key) => {
+      if (!pathY.has(key)) subtreeSpan(key);
+    });
+
+    return { rootKey: roots[0]?.key ?? null, pathY };
+  };
+
+  const applyLinkRouting = (diagram: go.Diagram): void => {
+    diagram.links.each((link: go.Link) => {
+      const toCategory = (link.toNode?.data as any)?.category;
+      link.routing = toCategory === 'SEQUENCE' ? go.Routing.Orthogonal : go.Routing.Normal;
+      link.corner = 0;
+      link.invalidateRoute();
+    });
   };
 
   const applyLayout = (component: any): void => {
     const diagram = component.diagram as go.Diagram | undefined;
     if (!diagram) return;
 
-    // Always begin from the exact RiskSpectrum-style geometry generated by the ET editor.
     restoreBaseGeometry(component);
+    removeCenteredResultLink(diagram);
 
-    if (getMode(component) === 'CENTERED') {
-      const sequenceCenters = getSequenceCenters(component);
-      if (sequenceCenters.length > 1) {
-        // True centered ET: keep every branch and every consequence on its original row.
-        // Only move the main event-tree spine to the geometric centre of the outcomes.
-        // Branches therefore fan both upward and downward without changing their topology.
-        const firstY = sequenceCenters[0];
-        const lastY = sequenceCenters[sequenceCenters.length - 1];
-        const centerY = (firstY + lastY) / 2;
-
-        diagram.nodes.each((node: go.Node) => {
-          const data = node.data as any;
-          const category = data?.category;
-          const key = String(data?.key ?? '');
-
-          if (category === 'START_POINT' || category === 'FE_POINT' || key === '__BASELINE_END__') {
-            node.location = new go.Point(node.location.x, centerY);
-          }
-        });
-      }
+    if (getMode(component) !== 'CENTERED') {
+      applyLinkRouting(diagram);
+      component.lockViewport?.();
+      return;
     }
 
-    diagram.links.each((link: go.Link) => link.invalidateRoute());
+    const { rootKey, pathY } = buildSequenceGeometry(component);
+    if (!rootKey || !pathY.size) {
+      applyLinkRouting(diagram);
+      component.lockViewport?.();
+      return;
+    }
+
+    const mainY = pathY.get(rootKey);
+    if (!Number.isFinite(mainY)) return;
+
+    // Same principle as the centered Fault Tree layout: each logical subtree is
+    // centred on the vertical span of its descendants. Here the FT X-axis
+    // centring is rotated into the Event Tree Y-axis while FE columns stay fixed.
+    diagram.nodes.each((node: go.Node) => {
+      const data = node.data as any;
+      const category = data?.category;
+      const key = String(data?.key ?? '');
+
+      if (category === 'START_POINT' || category === 'FE_POINT' || key === '__BASELINE_END__') {
+        node.location = new go.Point(node.location.x, mainY!);
+        return;
+      }
+
+      if (category === 'BRANCH') {
+        const sequenceKey = data.pathSequenceKey ? String(data.pathSequenceKey) : '';
+        const y = pathY.get(sequenceKey);
+        if (Number.isFinite(y)) node.location = new go.Point(node.location.x, y!);
+        return;
+      }
+
+      if (category !== 'ANCHOR' || !key.startsWith('__BEND-')) return;
+
+      const target = node.findLinksOutOf().first()?.toNode;
+      if (!target) return;
+      const targetData = target.data as any;
+      const sequenceKey = targetData?.category === 'SEQUENCE'
+        ? String(targetData.key)
+        : targetData?.pathSequenceKey
+          ? String(targetData.pathSequenceKey)
+          : '';
+      const y = pathY.get(sequenceKey);
+      if (Number.isFinite(y)) node.location = new go.Point(node.location.x, y!);
+    });
+
+    // The standard ET relies on coincident Y positions at the result boundary.
+    // Once the root path is centred, add a runtime-only orthogonal result leg so
+    // the main path still terminates cleanly on its original consequence row.
+    const model = diagram.model as go.GraphLinksModel;
+    const hasMainResultLink = (model.linkDataArray as any[]).some(
+      (data) => data.from === '__BASELINE_END__' && data.to === rootKey
+    );
+    if (!hasMainResultLink) {
+      model.addLinkData({
+        from: '__BASELINE_END__',
+        to: rootKey,
+        [CENTER_RESULT_MARKER]: true
+      });
+    }
+
+    applyLinkRouting(diagram);
     component.lockViewport?.();
   };
 
@@ -99,14 +234,13 @@ export function installEventTreeLayoutToggleV2Patch(): void {
 
     const controls = document.createElement('span');
     controls.dataset['etLayoutV2'] = 'true';
-    controls.style.display = 'inline-flex';
-    controls.style.alignItems = 'center';
-    controls.style.gap = '7px';
+    // display:contents makes both controls true toolbar children, so they inherit
+    // exactly the same sizing, spacing, border and radius as Fit / + Branch.
+    controls.style.display = 'contents';
 
     const makeButton = (
       title: string,
       aria: string,
-      svgPath: string,
       mode: EventTreeLayoutMode
     ): HTMLButtonElement => {
       const button = document.createElement('button');
@@ -114,9 +248,9 @@ export function installEventTreeLayoutToggleV2Patch(): void {
       button.title = title;
       button.setAttribute('aria-label', aria);
       button.setAttribute('aria-pressed', 'false');
-      // No custom button dimensions: inherit exactly the same toolbar button
-      // height, padding, border and radius as Fit and + Branch.
-      button.innerHTML = `<svg viewBox="0 0 26 18" width="22" height="16" aria-hidden="true" style="display:block"><path d="${svgPath}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+      // The supplied reference uses the same E-shaped layout glyph for both
+      // states; the active button is distinguished by the blue selected state.
+      button.innerHTML = '<svg viewBox="0 0 26 18" width="22" height="16" aria-hidden="true" style="display:block"><path d="M7 2v14M7 3h12M7 9h9M7 15h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
       button.addEventListener('click', () => {
         component.__eventTreeLayoutModeV2 = mode;
         updateButtons(component);
@@ -125,18 +259,14 @@ export function installEventTreeLayoutToggleV2Patch(): void {
       return button;
     };
 
-    // Icons reproduce the supplied reference:
-    // 1) one-sided E layout, 2) centred spine with branches on both sides.
     const standard = makeButton(
       'Disposition ET actuelle',
       'Garder la disposition actuelle de l’Event Tree',
-      'M8 2v14M8 3h12M8 9h9M8 15h12',
       'STANDARD'
     );
     const centered = makeButton(
-      'Centrer les branches ET',
-      'Centrer les branches de l’Event Tree',
-      'M13 2v14M13 3h8M5 9h16M13 15h8',
+      'Disposition ET centrée',
+      'Centrer les sous-arbres de l’Event Tree',
       'CENTERED'
     );
 
@@ -173,6 +303,8 @@ export function installEventTreeLayoutToggleV2Patch(): void {
   };
 
   prototype.ngOnDestroy = function(): void {
+    const diagram = this.diagram as go.Diagram | undefined;
+    if (diagram) removeCenteredResultLink(diagram);
     (this.__eventTreeLayoutControlsV2 as HTMLElement | undefined)?.remove();
     this.__eventTreeLayoutControlsV2 = null;
     this.__eventTreeLayoutLeftButton = null;
