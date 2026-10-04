@@ -34,4 +34,5 @@ export interface EventTreeModel {
   links: EventTreeLinkData[];
   editedDate: string;
   editedBy: string;
+  tagColor?: string | null;
 }
