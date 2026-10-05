@@ -30,9 +30,26 @@ export function installEventTreeSequenceSelectionPatch(): void {
       const shape = node.findObject('SEQUENCE_ROW_BG') as go.Shape | null;
       if (!shape) return;
 
-      shape.fill = node.isSelected ? '#e8f1ff' : '#ffffff';
-      shape.stroke = node.isSelected ? '#2563eb' : '#cbd5e1';
-      shape.strokeWidth = node.isSelected ? 1.5 : 1;
+      // A sequence row can be highlighted for two different reasons:
+      // 1) the user selected the row itself (GoJS isSelected), or
+      // 2) the row belongs to the logical ET branch currently highlighted by the
+      //    branch/forward-selection patches. Those patches use the darker
+      //    ACTIVE_SEQUENCE_STROKE (#0f5bd8).
+      //
+      // Do not erase the logical branch highlight when GoJS later emits a
+      // deselection callback for a previously selected sequence (notably S1 when
+      // the user clicks an upper FE point). That late callback was the reason
+      // Sequence 1 became white while downstream rows stayed blue.
+      const branchHighlighted = shape.fill === '#e8f1ff' && shape.stroke === '#0f5bd8';
+      const active = node.isSelected || branchHighlighted;
+
+      shape.fill = active ? '#e8f1ff' : '#ffffff';
+      shape.stroke = node.isSelected
+        ? '#2563eb'
+        : branchHighlighted
+          ? '#0f5bd8'
+          : '#cbd5e1';
+      shape.strokeWidth = active ? 1.5 : 1;
     };
   };
 }
