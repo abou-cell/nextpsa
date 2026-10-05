@@ -12,6 +12,7 @@ import { installEventTreeBodyDensityPatch } from './app/gojs/event-tree/event-tr
 import { installEventTreeBranchContextMenuPatch } from './app/gojs/event-tree/event-tree-branch-context-menu.patch';
 import { installEventTreeForwardSelectionPatch } from './app/gojs/event-tree/event-tree-forward-selection.patch';
 import { installEventTreeLayoutToggleV2Patch } from './app/gojs/event-tree/event-tree-layout-toggle-v2.patch';
+import { installEventTreeLayoutButtonStylePatch } from './app/gojs/event-tree/event-tree-layout-button-style.patch';
 
 installEventTreeDotBehaviorPatch();
 installEventTreeHeaderDragPatch();
@@ -24,6 +25,7 @@ installEventTreeBodyDensityPatch();
 installEventTreeBranchContextMenuPatch();
 installEventTreeForwardSelectionPatch();
 installEventTreeLayoutToggleV2Patch();
+installEventTreeLayoutButtonStylePatch();
 
 bootstrapApplication(AppComponent, appConfig).catch((error: unknown) => {
   console.error('NextPSA bootstrap failed', error);
