@@ -84,7 +84,7 @@ export function installEventTreeLayoutToggleV2Patch(): void {
   };
 
   const buildSequenceTree = (component: any): { roots: SequenceInfo[]; byKey: Map<string, SequenceInfo> } => {
-    const sequences = (component.model?.nodes ?? [])
+    const sequences: SequenceInfo[] = (component.model?.nodes ?? [])
       .filter((node: any) => node.category === 'SEQUENCE')
       .map((node: any): SequenceInfo => ({
         key: String(node.key),
@@ -95,7 +95,9 @@ export function installEventTreeLayoutToggleV2Patch(): void {
         subtreeSize: 1
       }));
 
-    const byKey = new Map(sequences.map((sequence: SequenceInfo) => [sequence.key, sequence]));
+    const byKey: Map<string, SequenceInfo> = new Map<string, SequenceInfo>(
+      sequences.map((sequence: SequenceInfo) => [sequence.key, sequence] as [string, SequenceInfo])
+    );
     sequences.forEach((sequence: SequenceInfo) => {
       if (!sequence.parentKey) return;
       byKey.get(sequence.parentKey)?.children.push(sequence);
@@ -120,10 +122,6 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     return { roots, byKey };
   };
 
-  // A planar, centred ordering. Children branching at later FE columns are placed
-  // closest to their parent path. Earlier branches are progressively farther away.
-  // This ordering is the key rule that prevents a later vertical take-off from
-  // cutting through a horizontal branch that started at an earlier FE column.
   const centredSequenceOrder = (roots: SequenceInfo[]): SequenceInfo[] => {
     const layoutSubtree = (sequence: SequenceInfo): SequenceInfo[] => {
       const upper: SequenceInfo[] = [];
@@ -145,8 +143,6 @@ export function installEventTreeLayoutToggleV2Patch(): void {
       });
 
       const ordered: SequenceInfo[] = [];
-      // Upper children were collected from nearest to farthest. Reverse the groups
-      // when drawing top-to-bottom so the latest FE branch stays nearest the parent.
       [...upper].reverse().forEach((child) => ordered.push(...layoutSubtree(child)));
       ordered.push(sequence);
       lower.forEach((child) => ordered.push(...layoutSubtree(child)));
@@ -190,8 +186,6 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     const root = roots.find((sequence) => sequence.key === 'S1') ?? roots[0];
     const rootY = yBySequence.get(root.key) ?? firstRowCenter;
 
-    // Move result rows themselves into the same planar order as the branch lanes.
-    // Every sequence path can then remain horizontal all the way to Consequence.
     diagram.nodes.each((node: go.Node) => {
       const data = node.data as any;
       const category = data?.category;
@@ -217,9 +211,6 @@ export function installEventTreeLayoutToggleV2Patch(): void {
         return;
       }
 
-      // Branch-start anchors are kept at the source FE X and moved only vertically
-      // onto the downstream sequence lane. Existing links then become exactly:
-      // source -> vertical take-off -> horizontal run to the consequence lane.
       if (category === 'ANCHOR' && key.startsWith('__BEND-')) {
         const sequenceKey = downstreamSequenceKey(node);
         const laneY = yBySequence.get(sequenceKey);
@@ -227,9 +218,6 @@ export function installEventTreeLayoutToggleV2Patch(): void {
       }
     });
 
-    // The canonical ET baseline has no explicit result link for S1. In centred mode
-    // S1 is on the same horizontal lane as the baseline, so one straight runtime
-    // link completes the main path without a vertical rail or crossing.
     const model = diagram.model as go.GraphLinksModel;
     const alreadyLinked = (model.linkDataArray as any[]).some(
       (data) => data?.from === '__BASELINE_END__' && data?.to === root.key
@@ -250,9 +238,6 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     const metrics = component.__eventTreeViewportMetrics;
     if (!metrics) return;
 
-    // Rebuild from the non-centred canonical ET first. This means the centred view
-    // is always derived from a known-correct tree rather than from a previous
-    // transformed layout.
     originalApplyModel.call(component, metrics);
     saveBaseGeometry(component);
 
@@ -304,15 +289,11 @@ export function installEventTreeLayoutToggleV2Patch(): void {
       return button;
     };
 
-    // Standard: compact staircase of distinct horizontal ET paths, matching the
-    // user's reference more closely than the former E-shaped glyph.
     const standardIcon = `
       <svg viewBox="0 0 30 18" width="27" height="16" aria-hidden="true" style="display:block">
         <path d="M2 3H17 M6 3V6H21 M10 6V9H25 M14 9V12H28 M18 12V15H29" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"></path>
       </svg>`;
 
-    // Centred: a central main path with one vertical take-off upward and one
-    // downward, followed by horizontal consequence runs.
     const centeredIcon = `
       <svg viewBox="0 0 30 18" width="27" height="16" aria-hidden="true" style="display:block">
         <path d="M2 9H29 M9 9V4H25 M16 9V14H29" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"></path>
