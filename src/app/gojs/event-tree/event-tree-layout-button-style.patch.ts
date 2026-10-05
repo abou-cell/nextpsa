@@ -77,27 +77,27 @@ export function installEventTreeLayoutButtonStylePatch(): void {
     standard.classList.add('et-layout-ft-button');
     centered.classList.add('et-layout-ft-button');
 
-    // Keep the toolbar as compact as the Fault Tree workspace: icon only.
-    // The Standard icon intentionally uses only three visible branch levels.
+    // Standard ET: exactly three visible sequence branches.
+    // The upper line is the continuation path; two lower lines branch from it.
     standard.innerHTML = `
       <svg viewBox="0 0 30 20" aria-hidden="true">
-        <path d="M4 4H24 M8 4V9H24 M12 9V14H24"
+        <path d="M3 4H27 M10 4V10H27 M17 4V16H27"
           fill="none" stroke="currentColor" stroke-width="1.8"
           stroke-linecap="square" stroke-linejoin="miter"></path>
       </svg>`;
 
-    // Centered view: one compact three-branch tree, visually aligned with FT controls.
+    // Centered ET: one incoming path feeding exactly three centered outputs.
     centered.innerHTML = `
       <svg viewBox="0 0 30 20" aria-hidden="true">
-        <path d="M15 3V17 M6 5H24 M8 10H22 M10 15H20"
+        <path d="M3 10H13 M13 4V16 M13 4H27 M13 10H27 M13 16H27"
           fill="none" stroke="currentColor" stroke-width="1.8"
           stroke-linecap="square" stroke-linejoin="miter"></path>
       </svg>`;
 
-    standard.title = 'Disposition ET standard';
-    centered.title = 'Disposition ET centrée';
-    standard.setAttribute('aria-label', 'Afficher l’Event Tree en disposition standard');
-    centered.setAttribute('aria-label', 'Afficher l’Event Tree en disposition centrée');
+    standard.title = 'Disposition ET standard — 3 branches';
+    centered.title = 'Disposition ET centrée — 3 branches';
+    standard.setAttribute('aria-label', 'Afficher l’Event Tree standard avec trois branches');
+    centered.setAttribute('aria-label', 'Afficher l’Event Tree centré avec trois branches');
   };
 
   prototype.ngAfterViewInit = function(): void {
