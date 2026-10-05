@@ -16,25 +16,28 @@ export function installEventTreeLayoutButtonStylePatch(): void {
     style.id = STYLE_ID;
     style.textContent = `
       [data-et-layout-v2='true'] {
-        gap: 6px !important;
+        gap: 5px !important;
         margin-left: 2px !important;
       }
 
       [data-et-layout-v2='true'] > button.et-layout-ft-button {
-        width: 42px !important;
-        min-width: 42px !important;
-        height: 36px !important;
-        padding: 0 !important;
+        width: auto !important;
+        min-width: 0 !important;
+        height: 32px !important;
+        padding: 0 8px !important;
         display: inline-flex !important;
         align-items: center !important;
         justify-content: center !important;
-        gap: 0 !important;
+        gap: 4px !important;
         border: 1px solid #cbd5e1 !important;
-        border-radius: 8px !important;
+        border-radius: 6px !important;
         background: #ffffff !important;
         color: #111827 !important;
         box-shadow: none !important;
         line-height: 1 !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        white-space: nowrap !important;
       }
 
       [data-et-layout-v2='true'] > button.et-layout-ft-button:hover {
@@ -55,8 +58,14 @@ export function installEventTreeLayoutButtonStylePatch(): void {
 
       [data-et-layout-v2='true'] > button.et-layout-ft-button svg {
         display: block;
-        width: 28px;
-        height: 20px;
+        width: 22px !important;
+        height: 14px !important;
+        flex: 0 0 auto;
+        pointer-events: none;
+      }
+
+      [data-et-layout-v2='true'] > button.et-layout-ft-button span {
+        display: inline-block !important;
         pointer-events: none;
       }
     `;
@@ -77,27 +86,29 @@ export function installEventTreeLayoutButtonStylePatch(): void {
     standard.classList.add('et-layout-ft-button');
     centered.classList.add('et-layout-ft-button');
 
-    // Standard ET: exactly three visible sequence branches.
-    // The upper line is the continuation path; two lower lines branch from it.
+    // Restore the previous Event Tree toolbar representation shown in the reference:
+    // cascade icon + "Standard", scaled down to the same visual height as Fit.
     standard.innerHTML = `
-      <svg viewBox="0 0 30 20" aria-hidden="true">
-        <path d="M3 4H27 M10 4V10H27 M17 4V16H27"
-          fill="none" stroke="currentColor" stroke-width="1.8"
+      <svg viewBox="0 0 30 18" aria-hidden="true">
+        <path d="M2 3H17 M6 3V6H21 M10 6V9H25 M14 9V12H28 M18 12V15H29"
+          fill="none" stroke="currentColor" stroke-width="1.7"
           stroke-linecap="square" stroke-linejoin="miter"></path>
-      </svg>`;
+      </svg>
+      <span>Standard</span>`;
 
-    // Centered ET: one incoming path feeding exactly three centered outputs.
+    // Restore the previous centered-tree symbol + label, but with compact proportions.
     centered.innerHTML = `
-      <svg viewBox="0 0 30 20" aria-hidden="true">
-        <path d="M3 10H13 M13 4V16 M13 4H27 M13 10H27 M13 16H27"
-          fill="none" stroke="currentColor" stroke-width="1.8"
+      <svg viewBox="0 0 30 18" aria-hidden="true">
+        <path d="M29 3H20 M29 9H20 M29 15H20 M20 3V15 M20 9H12 M12 6V12 M12 9H2"
+          fill="none" stroke="currentColor" stroke-width="1.7"
           stroke-linecap="square" stroke-linejoin="miter"></path>
-      </svg>`;
+      </svg>
+      <span>Centré</span>`;
 
-    standard.title = 'Disposition ET standard — 3 branches';
-    centered.title = 'Disposition ET centrée — 3 branches';
-    standard.setAttribute('aria-label', 'Afficher l’Event Tree standard avec trois branches');
-    centered.setAttribute('aria-label', 'Afficher l’Event Tree centré avec trois branches');
+    standard.title = 'Disposition ET standard';
+    centered.title = 'Disposition ET centrée';
+    standard.setAttribute('aria-label', 'Afficher l’Event Tree en disposition standard');
+    centered.setAttribute('aria-label', 'Afficher l’Event Tree en disposition centrée');
   };
 
   prototype.ngAfterViewInit = function(): void {
