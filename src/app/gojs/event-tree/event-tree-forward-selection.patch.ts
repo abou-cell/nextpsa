@@ -145,8 +145,13 @@ export function installEventTreeForwardSelectionPatch(): void {
   };
 
   /**
-   * Standard mode can still be followed directly through GoJS because its links
-   * preserve the logical source -> target direction.
+   * Standard mode keeps the actual rendered branch links in source -> target
+   * direction, so those links can be highlighted directly through GoJS.
+   *
+   * The upper/main result row is the exception: the Standard renderer ends the
+   * visible baseline at __BASELINE_END__ and does not create a rendered link from
+   * that anchor to Sequence 1. Therefore result-row selection must use the logical
+   * ET graph, which explicitly contains __BASELINE_END__ -> S1.
    */
   const applyStandardForwardHighlight = (component: any, sourceKey: string): void => {
     const diagram = component.diagram as go.Diagram | undefined;
@@ -155,6 +160,7 @@ export function installEventTreeForwardSelectionPatch(): void {
     const source = diagram.findNodeForKey(sourceKey);
     if (!source) return;
 
+    const reachable = collectLogicalDescendants(component, sourceKey);
     const visitedNodes = new Set<go.Node>([source]);
     const visitedLinks = new Set<go.Link>();
     const queue: go.Node[] = [source];
@@ -171,8 +177,15 @@ export function installEventTreeForwardSelectionPatch(): void {
     }
 
     visitedLinks.forEach(setLinkActive);
-    visitedNodes.forEach((node) => {
-      if ((node.data as any)?.category === 'SEQUENCE') setSequenceActive(node);
+
+    // Do not infer result-row selection from the rendered Standard links. In
+    // particular, Sequence 1 is logically downstream of the baseline end anchor
+    // even though no physical GoJS link is drawn between them.
+    diagram.nodes.each((node: go.Node) => {
+      const data = node.data as any;
+      if (data?.category === 'SEQUENCE' && reachable.has(String(data.key))) {
+        setSequenceActive(node);
+      }
     });
   };
 
