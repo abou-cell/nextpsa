@@ -81,17 +81,18 @@ export function installEventTreeLayoutButtonStylePatch(): void {
     standard.classList.add('et-layout-ft-button');
     centered.classList.add('et-layout-ft-button');
 
-    // Keep the previous Event Tree toolbar symbols, but display the icons only.
+    // Reference icon: Standard layout = one top line with two downward branch levels.
     standard.innerHTML = `
       <svg viewBox="0 0 30 18" aria-hidden="true">
-        <path d="M2 3H17 M6 3V6H21 M10 6V9H25 M14 9V12H28 M18 12V15H29"
+        <path d="M2 3H28 M9 3V9H28 M17 3V15H28"
           fill="none" stroke="currentColor" stroke-width="1.7"
           stroke-linecap="square" stroke-linejoin="miter"></path>
       </svg>`;
 
+    // Reference icon: Centred layout = middle trunk with one branch above and one below.
     centered.innerHTML = `
       <svg viewBox="0 0 30 18" aria-hidden="true">
-        <path d="M29 3H20 M29 9H20 M29 15H20 M20 3V15 M20 9H12 M12 6V12 M12 9H2"
+        <path d="M2 9H28 M10 9V3H28 M18 9V15H28"
           fill="none" stroke="currentColor" stroke-width="1.7"
           stroke-linecap="square" stroke-linejoin="miter"></path>
       </svg>`;
