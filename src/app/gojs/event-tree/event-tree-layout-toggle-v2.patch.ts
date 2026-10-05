@@ -2,26 +2,25 @@ import * as go from 'gojs';
 import { EventTreeEditorComponent } from './event-tree-editor.component';
 
 type EventTreeLayoutMode = 'STANDARD' | 'CENTERED';
+type LogicalEdgeKind = 'CONTINUE' | 'BRANCH';
 
 const SAVED_CATEGORIES = new Set(['START_POINT', 'FE_POINT', 'BRANCH', 'ANCHOR', 'SEQUENCE']);
-const CENTER_MAIN_RESULT = '__etCenteredMainResult';
+const BASELINE_START_KEY = '__BASELINE_START__';
+const BASELINE_END_KEY = '__BASELINE_END__';
 const CENTER_ROUTE = '__etCenteredRoute';
-const CENTER_ANCHOR_PREFIX = '__BEND-CENTER-';
+const CENTER_ANCHOR_PREFIX = '__ETC-';
+
+interface LogicalEdge {
+  from: string;
+  to: string;
+  kind: LogicalEdgeKind;
+  branchNo: number;
+  order: number;
+}
 
 interface SequenceInfo {
   key: string;
-  parentKey?: string;
-  branchColumnIndex: number;
   sequenceNo: number;
-  children: SequenceInfo[];
-}
-
-interface CenteredBranchStart {
-  from: string;
-  to: string;
-  targetSequenceKey: string;
-  targetY: number;
-  branchNo: number;
 }
 
 export function installEventTreeLayoutToggleV2Patch(): void {
@@ -74,30 +73,6 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     });
   };
 
-  const removeCenteredArtifacts = (diagram: go.Diagram): void => {
-    const model = diagram.model as go.GraphLinksModel;
-
-    [...(model.linkDataArray as any[])]
-      .filter((data) => Boolean(data?.[CENTER_MAIN_RESULT]) || Boolean(data?.[CENTER_ROUTE]))
-      .forEach((data) => model.removeLinkData(data));
-
-    [...(model.nodeDataArray as any[])]
-      .filter((data) => String(data?.key ?? '').startsWith(CENTER_ANCHOR_PREFIX))
-      .forEach((data) => model.removeNodeData(data));
-  };
-
-  const removeStandardBranchBends = (diagram: go.Diagram): void => {
-    const model = diagram.model as go.GraphLinksModel;
-    [...(model.nodeDataArray as any[])]
-      .filter((data) => {
-        const key = String(data?.key ?? '');
-        return data?.category === 'ANCHOR'
-          && key.startsWith('__BEND-')
-          && !key.startsWith(CENTER_ANCHOR_PREFIX);
-      })
-      .forEach((data) => model.removeNodeData(data));
-  };
-
   const applyStraightRouting = (diagram: go.Diagram): void => {
     diagram.links.each((link: go.Link) => {
       link.routing = go.Routing.Normal;
@@ -109,149 +84,274 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     });
   };
 
-  const buildSequenceTree = (component: any): { roots: SequenceInfo[]; byKey: Map<string, SequenceInfo> } => {
-    const sequences: SequenceInfo[] = (component.model?.nodes ?? [])
-      .filter((node: any) => node.category === 'SEQUENCE')
-      .map((node: any): SequenceInfo => ({
-        key: String(node.key),
-        parentKey: node.parentSequenceKey ? String(node.parentSequenceKey) : undefined,
-        branchColumnIndex: Number(node.branchColumnIndex ?? 0),
-        sequenceNo: Number(node.sequenceNo ?? 0),
-        children: []
-      }));
-
-    const byKey: Map<string, SequenceInfo> = new Map<string, SequenceInfo>(
-      sequences.map((sequence: SequenceInfo) => [sequence.key, sequence] as [string, SequenceInfo])
-    );
-
-    sequences.forEach((sequence: SequenceInfo) => {
-      if (!sequence.parentKey) return;
-      byKey.get(sequence.parentKey)?.children.push(sequence);
-    });
-
-    // A right-most Function Event is kept closest to the parent path. For branches
-    // created from the same node/column, creation order is preserved by sequenceNo:
-    // an added branch is therefore always placed below the existing branches.
-    const childSort = (a: SequenceInfo, b: SequenceInfo): number => {
-      const columnDiff = b.branchColumnIndex - a.branchColumnIndex;
-      return columnDiff || a.sequenceNo - b.sequenceNo;
-    };
-
-    const sortSubtree = (sequence: SequenceInfo): void => {
-      sequence.children.sort(childSort);
-      sequence.children.forEach(sortSubtree);
-    };
-
-    const roots = sequences
-      .filter((sequence: SequenceInfo) => !sequence.parentKey || !byKey.has(sequence.parentKey))
-      .sort((a: SequenceInfo, b: SequenceInfo) => a.sequenceNo - b.sequenceNo);
-    roots.forEach(sortSubtree);
-
-    return { roots, byKey };
-  };
-
-  /**
-   * Monotonic planar order.
-   *
-   * Each sequence is followed immediately by its complete subtree. This gives each
-   * subtree one contiguous vertical band and guarantees that every child is below
-   * its parent. A vertical branch spine can therefore never cut a horizontal path
-   * from another subtree.
-   */
-  const centredSequenceOrder = (roots: SequenceInfo[]): SequenceInfo[] => {
-    const ordered: SequenceInfo[] = [];
-    const visit = (sequence: SequenceInfo): void => {
-      ordered.push(sequence);
-      sequence.children.forEach(visit);
-    };
-    roots.forEach(visit);
-    return ordered;
-  };
-
-  const sequenceKeyForTarget = (component: any, targetKey: string): string => {
-    const target = (component.model?.nodes ?? []).find((node: any) => String(node.key) === targetKey);
-    if (!target) return '';
-    if (target.category === 'SEQUENCE') return String(target.key);
-    return target.pathSequenceKey ? String(target.pathSequenceKey) : '';
-  };
-
   const branchNumber = (label: string | undefined): number => {
     const match = /^Branch\s+(\d+)/.exec(label ?? '');
     return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
   };
 
-  const rebuildCenteredBranchRoutes = (
+  const getSequences = (component: any): SequenceInfo[] =>
+    (component.model?.nodes ?? [])
+      .filter((node: any) => node.category === 'SEQUENCE')
+      .map((node: any): SequenceInfo => ({
+        key: String(node.key),
+        sequenceNo: Number(node.sequenceNo ?? 0)
+      }));
+
+  /**
+   * Build the logical Event Tree, not the Standard-mode drawing.
+   *
+   * The main success path is reconstructed explicitly:
+   * IE -> FE1 -> FE2 -> ... -> result S1.
+   * Branch paths come from the domain model links.
+   *
+   * The centered layout uses this graph from right to left, starting at the
+   * consequences. It therefore does not assume that the initiating point or the
+   * main FE row has to stay at the Standard-mode Y coordinate.
+   */
+  const buildLogicalEdges = (component: any): { edges: LogicalEdge[]; mainSequenceKey: string } => {
+    const edges: LogicalEdge[] = [];
+    let order = 0;
+    const sequences = getSequences(component);
+    const mainSequenceKey = sequences.some((sequence) => sequence.key === 'S1')
+      ? 'S1'
+      : [...sequences].sort((a, b) => a.sequenceNo - b.sequenceNo)[0]?.key ?? '';
+    const feCount = Number(component.model?.functionEvents?.length ?? 0);
+
+    const addContinue = (from: string, to: string): void => {
+      if (!from || !to) return;
+      edges.push({ from, to, kind: 'CONTINUE', branchNo: 0, order: order++ });
+    };
+
+    if (feCount > 0) {
+      addContinue(BASELINE_START_KEY, 'FEPOINT-1');
+      for (let column = 1; column < feCount; column += 1) {
+        addContinue(`FEPOINT-${column}`, `FEPOINT-${column + 1}`);
+      }
+      addContinue(`FEPOINT-${feCount}`, BASELINE_END_KEY);
+    } else {
+      addContinue(BASELINE_START_KEY, BASELINE_END_KEY);
+    }
+    if (mainSequenceKey) addContinue(BASELINE_END_KEY, mainSequenceKey);
+
+    (component.model?.links ?? []).forEach((link: any) => {
+      const from = String(link.from ?? '');
+      const to = String(link.to ?? '');
+      if (!from || !to) return;
+      const isBranch = /^Branch\s+\d+/.test(link.label ?? '');
+      edges.push({
+        from,
+        to,
+        kind: isBranch ? 'BRANCH' : 'CONTINUE',
+        branchNo: isBranch ? branchNumber(link.label) : 0,
+        order: order++
+      });
+    });
+
+    // Remove exact duplicates while preserving the first occurrence.
+    const seen = new Set<string>();
+    const deduplicated = edges.filter((edge) => {
+      const key = `${edge.from}\u0000${edge.to}\u0000${edge.kind}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return { edges: deduplicated, mainSequenceKey };
+  };
+
+  const buildOutgoing = (edges: LogicalEdge[]): Map<string, LogicalEdge[]> => {
+    const outgoing = new Map<string, LogicalEdge[]>();
+    edges.forEach((edge) => {
+      const list = outgoing.get(edge.from) ?? [];
+      list.push(edge);
+      outgoing.set(edge.from, list);
+    });
+
+    outgoing.forEach((list) => list.sort((a, b) => {
+      // Continue/success path first. Existing numbered branches follow in creation
+      // order. A new Branch N+1 is therefore always below the existing branches.
+      if (a.kind !== b.kind) return a.kind === 'CONTINUE' ? -1 : 1;
+      if (a.kind === 'BRANCH' && a.branchNo !== b.branchNo) return a.branchNo - b.branchNo;
+      return a.order - b.order;
+    }));
+
+    return outgoing;
+  };
+
+  /**
+   * Consequence-first sequence ordering.
+   *
+   * We traverse the logical ET from the initiating event to discover terminal
+   * consequences, but the terminal rows are the fixed geometry. Every subtree is
+   * contiguous in the result table. Because continuation comes first and Branch N
+   * follows Branch N-1, adding a branch never inserts it above an existing sibling.
+   */
+  const buildConsequenceOrder = (
     component: any,
+    outgoing: Map<string, LogicalEdge[]>
+  ): string[] => {
+    const sequenceKeys = new Set(getSequences(component).map((sequence) => sequence.key));
+    const ordered: string[] = [];
+    const seenSequences = new Set<string>();
+    const activePath = new Set<string>();
+
+    const visit = (key: string): void => {
+      if (sequenceKeys.has(key)) {
+        if (!seenSequences.has(key)) {
+          seenSequences.add(key);
+          ordered.push(key);
+        }
+        return;
+      }
+      if (activePath.has(key)) return;
+      activePath.add(key);
+      (outgoing.get(key) ?? []).forEach((edge) => visit(edge.to));
+      activePath.delete(key);
+    };
+
+    visit(BASELINE_START_KEY);
+
+    // Keep malformed/orphan result rows visible and deterministic.
+    getSequences(component)
+      .filter((sequence) => !seenSequences.has(sequence.key))
+      .sort((a, b) => a.sequenceNo - b.sequenceNo)
+      .forEach((sequence) => ordered.push(sequence.key));
+
+    return ordered;
+  };
+
+  /**
+   * Starting from the consequence Y coordinates, calculate every upstream branch
+   * point as the centre of the vertical band occupied by its direct child subtrees.
+   * The initiating event is treated exactly like every other upstream node: it is
+   * free to move to the geometric centre of the complete Event Tree.
+   */
+  const buildCenteredYResolver = (
+    component: any,
+    outgoing: Map<string, LogicalEdge[]>,
+    yBySequence: Map<string, number>,
+    fallbackY: number
+  ): ((key: string) => number) => {
+    const nodeByKey = new Map<string, any>(
+      (component.model?.nodes ?? []).map((node: any) => [String(node.key), node])
+    );
+    const memo = new Map<string, number>();
+    const visiting = new Set<string>();
+
+    const resolve = (key: string): number => {
+      const sequenceY = yBySequence.get(key);
+      if (Number.isFinite(sequenceY)) return sequenceY!;
+      const cached = memo.get(key);
+      if (Number.isFinite(cached)) return cached!;
+      if (visiting.has(key)) return fallbackY;
+
+      visiting.add(key);
+      const childYs = (outgoing.get(key) ?? [])
+        .map((edge) => resolve(edge.to))
+        .filter((value) => Number.isFinite(value));
+      visiting.delete(key);
+
+      let y: number;
+      if (childYs.length) {
+        // Mid-range, rather than arithmetic mean, centres the node on the complete
+        // descendant band and does not bias wide subtrees containing many leaves.
+        y = (Math.min(...childYs) + Math.max(...childYs)) / 2;
+      } else {
+        const node = nodeByKey.get(key);
+        const pathSequenceKey = node?.pathSequenceKey ? String(node.pathSequenceKey) : '';
+        y = yBySequence.get(pathSequenceKey) ?? fallbackY;
+      }
+
+      memo.set(key, y);
+      return y;
+    };
+
+    return resolve;
+  };
+
+  const anchorKey = (sourceKey: string, index: number): string =>
+    `${CENTER_ANCHOR_PREFIX}${encodeURIComponent(sourceKey)}-${index}`;
+
+  /**
+   * Rebuild every ET connection using orthogonal geometry only.
+   *
+   * Each source owns one vertical spine. The spine is split into adjacent segments,
+   * so two branches from the same node never draw duplicated vertical lines on top
+   * of one another. Each child then leaves the spine horizontally on its own Y lane.
+   */
+  const rebuildCenteredRoutes = (
     diagram: go.Diagram,
-    yBySequence: Map<string, number>
+    outgoing: Map<string, LogicalEdge[]>,
+    resolveY: (key: string) => number
   ): void => {
     const model = diagram.model as go.GraphLinksModel;
 
-    // Standard layout creates one bend for every Branch-N link. In centered mode
-    // those independent vertical segments can overlap. Remove them and rebuild a
-    // single shared vertical spine per branch source with one horizontal exit per
-    // child lane.
-    removeStandardBranchBends(diagram);
+    // Centered mode owns all ET routes. Remove Standard links and Standard bends.
+    [...(model.linkDataArray as any[])].forEach((data) => model.removeLinkData(data));
+    [...(model.nodeDataArray as any[])]
+      .filter((data) => {
+        const key = String(data?.key ?? '');
+        return data?.category === 'ANCHOR' && key.startsWith('__BEND-');
+      })
+      .forEach((data) => model.removeNodeData(data));
+    [...(model.nodeDataArray as any[])]
+      .filter((data) => String(data?.key ?? '').startsWith(CENTER_ANCHOR_PREFIX))
+      .forEach((data) => model.removeNodeData(data));
 
-    const grouped = new Map<string, CenteredBranchStart[]>();
-    (component.model?.links ?? [])
-      .filter((link: any) => /^Branch\s+\d+/.test(link.label ?? ''))
-      .forEach((link: any) => {
-        const targetSequenceKey = sequenceKeyForTarget(component, String(link.to));
-        const targetY = yBySequence.get(targetSequenceKey);
-        if (!targetSequenceKey || !Number.isFinite(targetY)) return;
-
-        const item: CenteredBranchStart = {
-          from: String(link.from),
-          to: String(link.to),
-          targetSequenceKey,
-          targetY: targetY!,
-          branchNo: branchNumber(link.label)
-        };
-        const list = grouped.get(item.from) ?? [];
-        list.push(item);
-        grouped.set(item.from, list);
-      });
-
-    grouped.forEach((starts, sourceKey) => {
+    outgoing.forEach((children, sourceKey) => {
       const sourceNode = diagram.findNodeForKey(sourceKey);
-      if (!sourceNode) return;
-
-      // Geometric order is authoritative. Branch number is only a stable tie-break.
-      starts.sort((a, b) => (a.targetY - b.targetY) || (a.branchNo - b.branchNo));
+      if (!sourceNode || !children.length) return;
 
       const sourceX = sourceNode.location.x;
-      let previousTrunkKey = sourceKey;
+      const sourceY = resolveY(sourceKey);
+      const routedChildren = children
+        .map((edge) => ({ edge, targetNode: diagram.findNodeForKey(edge.to), y: resolveY(edge.to) }))
+        .filter((item) => item.targetNode && Number.isFinite(item.y));
+      if (!routedChildren.length) return;
 
-      starts.forEach((start, index) => {
-        const anchorKey = `${CENTER_ANCHOR_PREFIX}${encodeURIComponent(sourceKey)}-${index + 1}`;
-        const anchorData = {
-          key: anchorKey,
+      const levels = Array.from(new Set([sourceY, ...routedChildren.map((item) => item.y)]))
+        .sort((a, b) => a - b);
+      const keyByY = new Map<number, string>();
+
+      levels.forEach((y, index) => {
+        if (Math.abs(y - sourceY) < 0.001) {
+          keyByY.set(y, sourceKey);
+          return;
+        }
+        const key = anchorKey(sourceKey, index + 1);
+        model.addNodeData({
+          key,
           category: 'ANCHOR',
-          loc: `${sourceX} ${start.targetY}`,
-          pathSequenceKey: start.targetSequenceKey,
+          loc: `${sourceX} ${y}`,
           [CENTER_ROUTE]: true
-        };
-        model.addNodeData(anchorData);
+        });
+        keyByY.set(y, key);
+      });
 
-        // One vertical spine segment only. No duplicated/overlapping vertical links.
+      // One non-overlapping vertical spine made from adjacent segments.
+      for (let index = 0; index < levels.length - 1; index += 1) {
+        const from = keyByY.get(levels[index]);
+        const to = keyByY.get(levels[index + 1]);
+        if (!from || !to || from === to) continue;
         model.addLinkData({
-          from: previousTrunkKey,
-          to: anchorKey,
+          from,
+          to,
           [CENTER_ROUTE]: true,
           centeredRole: 'SPINE'
         });
+      }
 
-        // Each sequence then owns one strictly horizontal exit to its first node.
+      // One horizontal exit per child. No diagonal segment is ever required.
+      routedChildren.forEach(({ edge, y }) => {
+        const from = keyByY.get(y);
+        if (!from) return;
         model.addLinkData({
-          from: anchorKey,
-          to: start.to,
+          from,
+          to: edge.to,
           [CENTER_ROUTE]: true,
-          centeredRole: 'EXIT',
-          pathSequenceKey: start.targetSequenceKey
+          centeredRole: edge.kind === 'BRANCH' ? 'BRANCH_EXIT' : 'CONTINUE_EXIT',
+          branchNo: edge.branchNo
         });
-
-        previousTrunkKey = anchorKey;
       });
     });
   };
@@ -260,27 +360,26 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     const diagram = component.diagram as go.Diagram | undefined;
     if (!diagram) return;
 
-    const { roots } = buildSequenceTree(component);
-    if (!roots.length) return;
-
-    const ordered = centredSequenceOrder(roots);
-    if (!ordered.length) return;
+    const { edges } = buildLogicalEdges(component);
+    const outgoing = buildOutgoing(edges);
+    const consequenceOrder = buildConsequenceOrder(component, outgoing);
+    if (!consequenceOrder.length) return;
 
     const rowHeight = Number(component.__eventTreeViewportMetrics?.sequenceRowHeight ?? 34);
     const headerHeight = Number(component.__eventTreeViewportMetrics?.headerHeight ?? 82);
     const firstRowCenter = headerHeight + rowHeight / 2;
     const yBySequence = new Map<string, number>();
-    ordered.forEach((sequence, index) => {
-      yBySequence.set(sequence.key, firstRowCenter + index * rowHeight);
+    consequenceOrder.forEach((sequenceKey, index) => {
+      yBySequence.set(sequenceKey, firstRowCenter + index * rowHeight);
     });
 
-    const root = roots.find((sequence) => sequence.key === 'S1') ?? roots[0];
-    const rootY = yBySequence.get(root.key) ?? firstRowCenter;
+    const treeCenterY = firstRowCenter + ((consequenceOrder.length - 1) * rowHeight) / 2;
+    const resolveY = buildCenteredYResolver(component, outgoing, yBySequence, treeCenterY);
     const model = diagram.model as go.GraphLinksModel;
 
-    diagram.startTransaction('center event tree');
-    removeCenteredArtifacts(diagram);
+    diagram.startTransaction('center event tree from consequences');
 
+    // 1) Consequences/result rows are the immutable starting geometry.
     diagram.nodes.each((node: go.Node) => {
       const data = node.data as any;
       const category = data?.category;
@@ -288,46 +387,31 @@ export function installEventTreeLayoutToggleV2Patch(): void {
 
       if (category === 'SEQUENCE') {
         const laneY = yBySequence.get(key);
-        if (Number.isFinite(laneY)) {
-          node.location = new go.Point(node.location.x, laneY! - rowHeight / 2);
+        if (!Number.isFinite(laneY)) return;
+        node.location = new go.Point(node.location.x, laneY! - rowHeight / 2);
 
-          // The result table must always read 1, 2, 3... from top to bottom.
-          // This is a display normalization only; sequence keys remain untouched.
-          const displayNo = ordered.findIndex((sequence) => sequence.key === key) + 1;
-          if (displayNo > 0) {
-            model.setDataProperty(data, 'sequenceNo', displayNo);
-            model.setDataProperty(data, 'label', `Sequence ${displayNo}`);
-          }
+        // Display order is always strictly increasing from top to bottom.
+        const displayNo = consequenceOrder.indexOf(key) + 1;
+        if (displayNo > 0) {
+          model.setDataProperty(data, 'sequenceNo', displayNo);
+          model.setDataProperty(data, 'label', `Sequence ${displayNo}`);
         }
         return;
       }
 
-      if (category === 'START_POINT' || category === 'FE_POINT' || key === '__BASELINE_END__') {
-        node.location = new go.Point(node.location.x, rootY);
-        return;
-      }
-
-      if (category === 'BRANCH') {
-        const sequenceKey = data.pathSequenceKey ? String(data.pathSequenceKey) : '';
-        const laneY = yBySequence.get(sequenceKey);
-        if (Number.isFinite(laneY)) node.location = new go.Point(node.location.x, laneY!);
+      if (category === 'START_POINT'
+        || category === 'FE_POINT'
+        || category === 'BRANCH'
+        || key === BASELINE_END_KEY) {
+        node.location = new go.Point(node.location.x, resolveY(key));
       }
     });
 
-    rebuildCenteredBranchRoutes(component, diagram, yBySequence);
+    // 2) Rebuild from right to left conceptually: source Y values already came from
+    // downstream consequence bands, then routes are generated from those positions.
+    rebuildCenteredRoutes(diagram, outgoing, resolveY);
 
-    const alreadyLinked = (model.linkDataArray as any[]).some(
-      (data) => data?.from === '__BASELINE_END__' && data?.to === root.key
-    );
-    if (!alreadyLinked) {
-      model.addLinkData({
-        from: '__BASELINE_END__',
-        to: root.key,
-        [CENTER_MAIN_RESULT]: true
-      });
-    }
-
-    diagram.commitTransaction('center event tree');
+    diagram.commitTransaction('center event tree from consequences');
 
     applyStraightRouting(diagram);
     component.lockViewport?.();
@@ -394,7 +478,7 @@ export function installEventTreeLayoutToggleV2Patch(): void {
 
     const centeredIcon = `
       <svg viewBox="0 0 30 18" width="27" height="16" aria-hidden="true" style="display:block">
-        <path d="M2 5H29 M9 5V9 M9 9H25 M9 9V13 M9 13H29" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"></path>
+        <path d="M29 3H20 M29 9H20 M29 15H20 M20 3V15 M20 9H12 M12 6V12 M12 9H2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"></path>
       </svg>`;
 
     const standard = makeButton(
@@ -406,8 +490,8 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     );
     const centered = makeButton(
       'Centré',
-      'Disposition ET planaire sans croisement ni chevauchement',
-      'Afficher un Event Tree planaire avec nouvelles branches sous les branches existantes',
+      'Disposition centrée calculée depuis les conséquences',
+      'Construire l’Event Tree depuis les conséquences puis centrer chaque nœud sur ses descendants',
       centeredIcon,
       'CENTERED'
     );
@@ -446,8 +530,6 @@ export function installEventTreeLayoutToggleV2Patch(): void {
   };
 
   prototype.ngOnDestroy = function(): void {
-    const diagram = this.diagram as go.Diagram | undefined;
-    if (diagram) removeCenteredArtifacts(diagram);
     (this.__eventTreeLayoutControlsV2 as HTMLElement | undefined)?.remove();
     this.__eventTreeLayoutControlsV2 = null;
     this.__eventTreeLayoutLeftButton = null;
