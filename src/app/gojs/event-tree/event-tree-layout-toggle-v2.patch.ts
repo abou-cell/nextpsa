@@ -3,14 +3,16 @@ import { EventTreeEditorComponent } from './event-tree-editor.component';
 
 type EventTreeLayoutMode = 'STANDARD' | 'CENTERED';
 
-const SAVED_CATEGORIES = new Set(['START_POINT', 'FE_POINT', 'BRANCH', 'ANCHOR']);
+const SAVED_CATEGORIES = new Set(['START_POINT', 'FE_POINT', 'BRANCH', 'ANCHOR', 'SEQUENCE']);
 const CENTER_MAIN_RESULT = '__etCenteredMainResult';
-const CENTER_MAIN_ANCHOR = '__ET-CENTER-MAIN-RESULT-ANCHOR__';
-const RESULT_GUTTER = 18;
 
-interface SequenceRow {
+interface SequenceInfo {
   key: string;
-  centerY: number;
+  parentKey?: string;
+  branchColumnIndex: number;
+  sequenceNo: number;
+  children: SequenceInfo[];
+  subtreeSize: number;
 }
 
 export function installEventTreeLayoutToggleV2Patch(): void {
@@ -63,46 +65,15 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     });
   };
 
-  const sequenceRows = (component: any): Map<string, SequenceRow> => {
-    const diagram = component.diagram as go.Diagram | undefined;
-    const rows = new Map<string, SequenceRow>();
-    if (!diagram) return rows;
-
-    const rowHeight = Number(component.__eventTreeViewportMetrics?.sequenceRowHeight ?? 34);
-    diagram.nodes.each((node: go.Node) => {
-      const data = node.data as any;
-      if (data?.category !== 'SEQUENCE') return;
-      rows.set(String(data.key), {
-        key: String(data.key),
-        centerY: node.location.y + rowHeight / 2
-      });
-    });
-    return rows;
-  };
-
-  const mainSequenceKey = (component: any, rows: Map<string, SequenceRow>): string | null => {
-    if (rows.has('S1')) return 'S1';
-    const first = (component.model?.nodes ?? [])
-      .filter((node: any) => node.category === 'SEQUENCE')
-      .sort((a: any, b: any) => Number(a.sequenceNo ?? 0) - Number(b.sequenceNo ?? 0))[0];
-    return first?.key ? String(first.key) : ([...rows.keys()][0] ?? null);
-  };
-
   const removeCenteredMainResult = (diagram: go.Diagram): void => {
     const model = diagram.model as go.GraphLinksModel;
     [...(model.linkDataArray as any[])]
       .filter((data) => Boolean(data?.[CENTER_MAIN_RESULT]))
       .forEach((data) => model.removeLinkData(data));
-
-    const anchor = model.findNodeDataForKey(CENTER_MAIN_ANCHOR);
-    if (anchor) model.removeNodeData(anchor);
   };
 
   const applyStraightRouting = (diagram: go.Diagram): void => {
     diagram.links.each((link: go.Link) => {
-      // Geometry is explicitly built from aligned nodes + bend anchors.
-      // Normal routing therefore produces only the intended straight vertical
-      // and horizontal segments, with no automatic detours or weaving.
       link.routing = go.Routing.Normal;
       link.curve = go.Curve.None;
       link.corner = 0;
@@ -110,6 +81,81 @@ export function installEventTreeLayoutToggleV2Patch(): void {
       link.toShortLength = 0;
       link.invalidateRoute();
     });
+  };
+
+  const buildSequenceTree = (component: any): { roots: SequenceInfo[]; byKey: Map<string, SequenceInfo> } => {
+    const sequences = (component.model?.nodes ?? [])
+      .filter((node: any) => node.category === 'SEQUENCE')
+      .map((node: any): SequenceInfo => ({
+        key: String(node.key),
+        parentKey: node.parentSequenceKey ? String(node.parentSequenceKey) : undefined,
+        branchColumnIndex: Number(node.branchColumnIndex ?? 0),
+        sequenceNo: Number(node.sequenceNo ?? 0),
+        children: [],
+        subtreeSize: 1
+      }));
+
+    const byKey = new Map(sequences.map((sequence: SequenceInfo) => [sequence.key, sequence]));
+    sequences.forEach((sequence: SequenceInfo) => {
+      if (!sequence.parentKey) return;
+      byKey.get(sequence.parentKey)?.children.push(sequence);
+    });
+
+    const childSort = (a: SequenceInfo, b: SequenceInfo): number => {
+      const columnDiff = b.branchColumnIndex - a.branchColumnIndex;
+      return columnDiff || a.sequenceNo - b.sequenceNo;
+    };
+
+    const calculateSize = (sequence: SequenceInfo): number => {
+      sequence.children.sort(childSort);
+      sequence.subtreeSize = 1 + sequence.children.reduce((sum, child) => sum + calculateSize(child), 0);
+      return sequence.subtreeSize;
+    };
+
+    const roots = sequences
+      .filter((sequence: SequenceInfo) => !sequence.parentKey || !byKey.has(sequence.parentKey))
+      .sort((a: SequenceInfo, b: SequenceInfo) => a.sequenceNo - b.sequenceNo);
+    roots.forEach(calculateSize);
+
+    return { roots, byKey };
+  };
+
+  // A planar, centred ordering. Children branching at later FE columns are placed
+  // closest to their parent path. Earlier branches are progressively farther away.
+  // This ordering is the key rule that prevents a later vertical take-off from
+  // cutting through a horizontal branch that started at an earlier FE column.
+  const centredSequenceOrder = (roots: SequenceInfo[]): SequenceInfo[] => {
+    const layoutSubtree = (sequence: SequenceInfo): SequenceInfo[] => {
+      const upper: SequenceInfo[] = [];
+      const lower: SequenceInfo[] = [];
+      let upperSize = 0;
+      let lowerSize = 0;
+      let tieToUpper = true;
+
+      sequence.children.forEach((child) => {
+        if (upperSize < lowerSize || (upperSize === lowerSize && tieToUpper)) {
+          upper.push(child);
+          upperSize += child.subtreeSize;
+          tieToUpper = false;
+        } else {
+          lower.push(child);
+          lowerSize += child.subtreeSize;
+          tieToUpper = true;
+        }
+      });
+
+      const ordered: SequenceInfo[] = [];
+      // Upper children were collected from nearest to farthest. Reverse the groups
+      // when drawing top-to-bottom so the latest FE branch stays nearest the parent.
+      [...upper].reverse().forEach((child) => ordered.push(...layoutSubtree(child)));
+      ordered.push(sequence);
+      lower.forEach((child) => ordered.push(...layoutSubtree(child)));
+      return ordered;
+    };
+
+    const ordered: SequenceInfo[] = [];
+    roots.forEach((root) => ordered.push(...layoutSubtree(root)));
+    return ordered;
   };
 
   const downstreamSequenceKey = (node: go.Node): string => {
@@ -127,75 +173,73 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     const diagram = component.diagram as go.Diagram | undefined;
     if (!diagram) return;
 
-    const rows = sequenceRows(component);
-    if (!rows.size) return;
+    const { roots } = buildSequenceTree(component);
+    if (!roots.length) return;
 
-    const rowYs = [...rows.values()].map((row) => row.centerY).sort((a, b) => a - b);
-    const centerY = (rowYs[0] + rowYs[rowYs.length - 1]) / 2;
-    const rootKey = mainSequenceKey(component, rows);
-    const resultX = Number(component.__eventTreeViewportMetrics?.resultX ?? 0);
-    const resultRailX = Math.max(0, resultX - RESULT_GUTTER);
+    const ordered = centredSequenceOrder(roots);
+    if (!ordered.length) return;
 
+    const rowHeight = Number(component.__eventTreeViewportMetrics?.sequenceRowHeight ?? 34);
+    const headerHeight = Number(component.__eventTreeViewportMetrics?.headerHeight ?? 82);
+    const firstRowCenter = headerHeight + rowHeight / 2;
+    const yBySequence = new Map<string, number>();
+    ordered.forEach((sequence, index) => {
+      yBySequence.set(sequence.key, firstRowCenter + index * rowHeight);
+    });
+
+    const root = roots.find((sequence) => sequence.key === 'S1') ?? roots[0];
+    const rootY = yBySequence.get(root.key) ?? firstRowCenter;
+
+    // Move result rows themselves into the same planar order as the branch lanes.
+    // Every sequence path can then remain horizontal all the way to Consequence.
     diagram.nodes.each((node: go.Node) => {
       const data = node.data as any;
       const category = data?.category;
       const key = String(data?.key ?? '');
 
-      // Only the main ET spine is centered.
-      if (category === 'START_POINT' || category === 'FE_POINT') {
-        node.location = new go.Point(node.location.x, centerY);
+      if (category === 'SEQUENCE') {
+        const laneY = yBySequence.get(key);
+        if (Number.isFinite(laneY)) {
+          node.location = new go.Point(node.location.x, laneY! - rowHeight / 2);
+        }
         return;
       }
 
-      // Stop the main spine just before the consequence table. The dedicated
-      // result leg below then makes the final connection vertical + horizontal.
-      if (key === '__BASELINE_END__') {
-        node.location = new go.Point(resultRailX, centerY);
+      if (category === 'START_POINT' || category === 'FE_POINT' || key === '__BASELINE_END__') {
+        node.location = new go.Point(node.location.x, rootY);
         return;
       }
 
-      // Every branch path is locked to its own consequence/sequence row.
-      // Thus all branch runs towards Consequence are horizontal and parallel.
       if (category === 'BRANCH') {
         const sequenceKey = data.pathSequenceKey ? String(data.pathSequenceKey) : '';
-        const row = rows.get(sequenceKey);
-        if (row) node.location = new go.Point(node.location.x, row.centerY);
+        const laneY = yBySequence.get(sequenceKey);
+        if (Number.isFinite(laneY)) node.location = new go.Point(node.location.x, laneY!);
         return;
       }
 
-      // A branch-start bend is always positioned exactly below/above its source
-      // X coordinate and on the target sequence row. With Normal routing this is
-      // a vertical take-off followed by a horizontal branch, never a diagonal.
+      // Branch-start anchors are kept at the source FE X and moved only vertically
+      // onto the downstream sequence lane. Existing links then become exactly:
+      // source -> vertical take-off -> horizontal run to the consequence lane.
       if (category === 'ANCHOR' && key.startsWith('__BEND-')) {
         const sequenceKey = downstreamSequenceKey(node);
-        const row = rows.get(sequenceKey);
-        if (row) node.location = new go.Point(node.location.x, row.centerY);
+        const laneY = yBySequence.get(sequenceKey);
+        if (Number.isFinite(laneY)) node.location = new go.Point(node.location.x, laneY!);
       }
     });
 
-    // Main sequence result: vertical on the dedicated right-side rail, then one
-    // short horizontal segment into its consequence row. This prevents the main
-    // path from cutting diagonally across the branch lanes.
-    if (rootKey) {
-      const rootRow = rows.get(rootKey);
-      if (rootRow) {
-        const model = diagram.model as go.GraphLinksModel;
-        model.addNodeData({
-          key: CENTER_MAIN_ANCHOR,
-          category: 'ANCHOR',
-          loc: `${resultRailX} ${rootRow.centerY}`
-        });
-        model.addLinkData({
-          from: '__BASELINE_END__',
-          to: CENTER_MAIN_ANCHOR,
-          [CENTER_MAIN_RESULT]: true
-        });
-        model.addLinkData({
-          from: CENTER_MAIN_ANCHOR,
-          to: rootKey,
-          [CENTER_MAIN_RESULT]: true
-        });
-      }
+    // The canonical ET baseline has no explicit result link for S1. In centred mode
+    // S1 is on the same horizontal lane as the baseline, so one straight runtime
+    // link completes the main path without a vertical rail or crossing.
+    const model = diagram.model as go.GraphLinksModel;
+    const alreadyLinked = (model.linkDataArray as any[]).some(
+      (data) => data?.from === '__BASELINE_END__' && data?.to === root.key
+    );
+    if (!alreadyLinked) {
+      model.addLinkData({
+        from: '__BASELINE_END__',
+        to: root.key,
+        [CENTER_MAIN_RESULT]: true
+      });
     }
 
     applyStraightRouting(diagram);
@@ -206,7 +250,9 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     const metrics = component.__eventTreeViewportMetrics;
     if (!metrics) return;
 
-    // Always rebuild from the canonical ET geometry before changing layout.
+    // Rebuild from the non-centred canonical ET first. This means the centred view
+    // is always derived from a known-correct tree rather than from a previous
+    // transformed layout.
     originalApplyModel.call(component, metrics);
     saveBaseGeometry(component);
 
@@ -246,8 +292,6 @@ export function installEventTreeLayoutToggleV2Patch(): void {
       button.title = title;
       button.setAttribute('aria-label', aria);
       button.setAttribute('aria-pressed', 'false');
-      // Same visual box as + Branch / Fit: the button itself receives no custom
-      // border, radius, height or background, only an icon + text layout.
       button.style.display = 'inline-flex';
       button.style.alignItems = 'center';
       button.style.gap = '6px';
@@ -260,18 +304,18 @@ export function installEventTreeLayoutToggleV2Patch(): void {
       return button;
     };
 
-    // Standard icon inspired by the supplied reference: three parallel ET lanes
-    // stepped progressively to the right, visually representing the standard
-    // top-down branching arrangement.
+    // Standard: compact staircase of distinct horizontal ET paths, matching the
+    // user's reference more closely than the former E-shaped glyph.
     const standardIcon = `
-      <svg viewBox="0 0 26 18" width="23" height="16" aria-hidden="true" style="display:block">
-        <path d="M2 3H14 M6 3V7H18 M10 7V11H22 M14 11V15H25" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"></path>
+      <svg viewBox="0 0 30 18" width="27" height="16" aria-hidden="true" style="display:block">
+        <path d="M2 3H17 M6 3V6H21 M10 6V9H25 M14 9V12H28 M18 12V15H29" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"></path>
       </svg>`;
 
-    // Centered icon: one central spine with one branch above and one below.
+    // Centred: a central main path with one vertical take-off upward and one
+    // downward, followed by horizontal consequence runs.
     const centeredIcon = `
-      <svg viewBox="0 0 26 18" width="23" height="16" aria-hidden="true" style="display:block">
-        <path d="M2 9H25 M8 9V4H21 M14 9V14H25" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"></path>
+      <svg viewBox="0 0 30 18" width="27" height="16" aria-hidden="true" style="display:block">
+        <path d="M2 9H29 M9 9V4H25 M16 9V14H29" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter"></path>
       </svg>`;
 
     const standard = makeButton(
@@ -283,8 +327,8 @@ export function installEventTreeLayoutToggleV2Patch(): void {
     );
     const centered = makeButton(
       'Centré',
-      'Disposition ET centrée',
-      'Afficher l’Event Tree avec une ligne principale centrée et des branches parallèles',
+      'Disposition ET centrée sans croisement',
+      'Afficher un Event Tree centré avec sorties verticales et branches horizontales parallèles',
       centeredIcon,
       'CENTERED'
     );
