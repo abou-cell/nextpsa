@@ -19,6 +19,8 @@ import { installEventTreeMultiBranchSelectionPatch } from './app/gojs/event-tree
 import { installEventTreeTaggingConsistencyPatch } from './app/gojs/event-tree/event-tree-tagging-consistency.patch';
 import { installEventTreeTagTogglePatch } from './app/gojs/event-tree/event-tree-tag-toggle.patch';
 import { installEventTreeSelectionTaggingControllerPatch } from './app/gojs/event-tree/event-tree-selection-tagging-controller.patch';
+import { installEventTreeComponentTaggingPatch } from './app/gojs/event-tree/event-tree-component-tagging.patch';
+import { installEventTreePageTaggingPatch } from './app/features/event-tree/event-tree-page-tagging.patch';
 
 installEventTreeDotBehaviorPatch();
 installEventTreeHeaderDragPatch();
@@ -38,6 +40,8 @@ installEventTreeMultiBranchSelectionPatch();
 installEventTreeTaggingConsistencyPatch();
 installEventTreeTagTogglePatch();
 installEventTreeSelectionTaggingControllerPatch();
+installEventTreeComponentTaggingPatch();
+installEventTreePageTaggingPatch();
 
 bootstrapApplication(AppComponent, appConfig).catch((error: unknown) => {
   console.error('NextPSA bootstrap failed', error);
