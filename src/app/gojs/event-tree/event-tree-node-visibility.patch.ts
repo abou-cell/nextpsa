@@ -2,7 +2,10 @@ import * as go from 'gojs';
 import { EventTreeEditorComponent } from './event-tree-editor.component';
 
 const ACTION_CATEGORIES = new Set(['START_POINT', 'FE_POINT', 'BRANCH']);
-const HIDDEN_SIZE = 1.5;
+// Keep the hidden port practically dimensionless so GoJS does not clip links
+// around an invisible branch point. The separate transparent HIT_AREA remains
+// large and interactive for hover/click discovery.
+const HIDDEN_SIZE = 0.01;
 const HOVER_SIZE = 6;
 const SELECTED_SIZE = 8;
 
@@ -60,7 +63,18 @@ export function installEventTreeNodeVisibilityPatch(): void {
   const renderAll = (component: any): void => {
     const diagram = component.diagram as go.Diagram | undefined;
     if (!diagram) return;
+
     diagram.nodes.each((node: go.Node) => renderNode(component, node));
+
+    // ET branches must always render as continuous solid lines. Explicitly
+    // remove any residual dash pattern and end shortening left by older
+    // selection/layout patches, without changing their colour/highlight state.
+    diagram.links.each((link: go.Link) => {
+      link.fromShortLength = 0;
+      link.toShortLength = 0;
+      if (link.path) link.path.strokeDashArray = null;
+    });
+
     diagram.requestUpdate();
   };
 
