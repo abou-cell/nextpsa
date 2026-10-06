@@ -13,6 +13,7 @@ import { installEventTreeBranchContextMenuPatch } from './app/gojs/event-tree/ev
 import { installEventTreeForwardSelectionPatch } from './app/gojs/event-tree/event-tree-forward-selection.patch';
 import { installEventTreeLayoutToggleV2Patch } from './app/gojs/event-tree/event-tree-layout-toggle-v2.patch';
 import { installEventTreeCenteredStabilityPatch } from './app/gojs/event-tree/event-tree-centered-stability.patch';
+import { installEventTreeRootCenteringPatch } from './app/gojs/event-tree/event-tree-root-centering.patch';
 import { installEventTreeLayoutButtonStylePatch } from './app/gojs/event-tree/event-tree-layout-button-style.patch';
 
 installEventTreeDotBehaviorPatch();
@@ -27,6 +28,7 @@ installEventTreeBranchContextMenuPatch();
 installEventTreeForwardSelectionPatch();
 installEventTreeLayoutToggleV2Patch();
 installEventTreeCenteredStabilityPatch();
+installEventTreeRootCenteringPatch();
 installEventTreeLayoutButtonStylePatch();
 
 bootstrapApplication(AppComponent, appConfig).catch((error: unknown) => {
