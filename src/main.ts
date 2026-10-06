@@ -15,6 +15,7 @@ import { installEventTreeLayoutToggleV2Patch } from './app/gojs/event-tree/event
 import { installEventTreeCenteredStabilityPatch } from './app/gojs/event-tree/event-tree-centered-stability.patch';
 import { installEventTreeRootCenteringPatch } from './app/gojs/event-tree/event-tree-root-centering.patch';
 import { installEventTreeLayoutButtonStylePatch } from './app/gojs/event-tree/event-tree-layout-button-style.patch';
+import { installEventTreeMultiBranchSelectionPatch } from './app/gojs/event-tree/event-tree-multi-branch-selection.patch';
 
 installEventTreeDotBehaviorPatch();
 installEventTreeHeaderDragPatch();
@@ -30,6 +31,7 @@ installEventTreeLayoutToggleV2Patch();
 installEventTreeCenteredStabilityPatch();
 installEventTreeRootCenteringPatch();
 installEventTreeLayoutButtonStylePatch();
+installEventTreeMultiBranchSelectionPatch();
 
 bootstrapApplication(AppComponent, appConfig).catch((error: unknown) => {
   console.error('NextPSA bootstrap failed', error);
