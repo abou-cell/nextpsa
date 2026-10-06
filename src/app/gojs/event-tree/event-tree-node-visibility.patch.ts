@@ -94,16 +94,16 @@ export function installEventTreeNodeVisibilityPatch(): void {
       const previousLeave = template.mouseLeave;
       const previousClick = template.click;
 
-      template.mouseEnter = (event: go.InputEvent, object: go.GraphObject): void => {
-        previousEnter?.(event, object);
+      template.mouseEnter = (event: go.InputEvent, object: go.GraphObject, previousObject: go.GraphObject | null): void => {
+        previousEnter?.(event, object, previousObject);
         const node = object.part as go.Node | null;
         if (!node) return;
         (node as any).__eventTreeNodeHovered = true;
         renderNode(this, node);
       };
 
-      template.mouseLeave = (event: go.InputEvent, object: go.GraphObject): void => {
-        previousLeave?.(event, object);
+      template.mouseLeave = (event: go.InputEvent, object: go.GraphObject, nextObject: go.GraphObject | null): void => {
+        previousLeave?.(event, object, nextObject);
         const node = object.part as go.Node | null;
         if (!node) return;
         (node as any).__eventTreeNodeHovered = false;
