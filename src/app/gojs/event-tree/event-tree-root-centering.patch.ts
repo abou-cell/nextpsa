@@ -34,13 +34,31 @@ export function installEventTreeRootCenteringPatch(): void {
 
   const applyStraightRouting = (diagram: go.Diagram): void => {
     diagram.links.each((link: go.Link) => {
-      link.routing = go.Routing.Normal;
+      // Centered ET routes are explicitly orthogonal. This is a defensive
+      // invariant on top of the manually built vertical spines + horizontal exits:
+      // even if a future geometry pass moves an endpoint, GoJS cannot render a
+      // diagonal branch segment.
+      link.routing = (link.data as any)?.[CENTER_ROUTE]
+        ? go.Routing.Orthogonal
+        : go.Routing.Normal;
       link.curve = go.Curve.None;
       link.corner = 0;
       link.fromShortLength = 0;
       link.toShortLength = 0;
       link.invalidateRoute();
     });
+  };
+
+  const targetConnectionY = (component: any, target: go.Node): number => {
+    const category = String((target.data as any)?.category ?? '');
+    if (category === 'SEQUENCE') {
+      // SEQUENCE nodes use TopLeft location while ET links connect to the middle
+      // of the row (toSpot = Left). Using location.y directly therefore creates
+      // a half-row vertical error and, with Normal routing, a diagonal exit.
+      const rowHeight = Number(component.__eventTreeViewportMetrics?.sequenceRowHeight ?? 34);
+      return target.location.y + rowHeight / 2;
+    }
+    return target.location.y;
   };
 
   const getFirstMainBranchColumn = (component: any): number | null => {
@@ -114,7 +132,12 @@ export function installEventTreeRootCenteringPatch(): void {
     const children = getRootChildren(component, sourceKey, column)
       .map((child) => ({ child, target: diagram.findNodeForKey(child.to) }))
       .filter((item) => !!item.target)
-      .map((item) => ({ child: item.child, y: (item.target as go.Node).location.y }));
+      .map((item) => ({
+        child: item.child,
+        // Important: use the actual link connection lane, not the node's raw
+        // location. Result rows are located by their top-left corner.
+        y: targetConnectionY(component, item.target as go.Node)
+      }));
     if (!children.length) return;
 
     const sourceX = sourceNode.location.x;
