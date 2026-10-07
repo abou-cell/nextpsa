@@ -25,6 +25,7 @@ import { installEventTreeNodeVisibilityPatch } from './app/gojs/event-tree/event
 import { installEventTreeCenteredBoundaryPatch } from './app/gojs/event-tree/event-tree-centered-boundary.patch';
 import { installEventTreeRenderIntegrityPatch } from './app/gojs/event-tree/event-tree-render-integrity.patch';
 import { installEventTreeRecordDialogPatch } from './app/gojs/event-tree/event-tree-record-dialog.patch';
+import { installEventTreeRecordDialogSizePatch } from './app/gojs/event-tree/event-tree-record-dialog-size.patch';
 
 installEventTreeDotBehaviorPatch();
 installEventTreeHeaderDragPatch();
@@ -50,6 +51,7 @@ installEventTreeNodeVisibilityPatch();
 installEventTreeCenteredBoundaryPatch();
 installEventTreeRenderIntegrityPatch();
 installEventTreeRecordDialogPatch();
+installEventTreeRecordDialogSizePatch();
 
 bootstrapApplication(AppComponent, appConfig).catch((error: unknown) => {
   console.error('NextPSA bootstrap failed', error);
