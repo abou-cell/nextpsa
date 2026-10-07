@@ -24,6 +24,7 @@ import { installEventTreePageTaggingPatch } from './app/features/event-tree/even
 import { installEventTreeNodeVisibilityPatch } from './app/gojs/event-tree/event-tree-node-visibility.patch';
 import { installEventTreeCenteredBoundaryPatch } from './app/gojs/event-tree/event-tree-centered-boundary.patch';
 import { installEventTreeRenderIntegrityPatch } from './app/gojs/event-tree/event-tree-render-integrity.patch';
+import { installEventTreeRecordDialogPatch } from './app/gojs/event-tree/event-tree-record-dialog.patch';
 
 installEventTreeDotBehaviorPatch();
 installEventTreeHeaderDragPatch();
@@ -48,6 +49,7 @@ installEventTreePageTaggingPatch();
 installEventTreeNodeVisibilityPatch();
 installEventTreeCenteredBoundaryPatch();
 installEventTreeRenderIntegrityPatch();
+installEventTreeRecordDialogPatch();
 
 bootstrapApplication(AppComponent, appConfig).catch((error: unknown) => {
   console.error('NextPSA bootstrap failed', error);
