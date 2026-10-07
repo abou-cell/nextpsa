@@ -4,19 +4,53 @@ export function installEventTreeRecordDialogSizePatch(): void {
   const style = document.createElement('style');
   style.id = 'nextpsa-et-record-dialog-size-style';
   style.textContent = `
-    /* Keep ET record dialogs large enough to display the complete record form. */
+    /* Compact ET record dialogs while keeping the complete form usable. */
     .nps-et-record-dialog {
-      width: min(960px, calc(100vw - 24px)) !important;
-      height: min(620px, calc(100vh - 24px)) !important;
-      min-width: min(880px, calc(100vw - 24px)) !important;
-      min-height: min(520px, calc(100vh - 24px)) !important;
-      max-width: calc(100vw - 24px) !important;
-      max-height: calc(100vh - 24px) !important;
+      width: min(820px, calc(100vw - 32px)) !important;
+      height: min(520px, calc(100vh - 32px)) !important;
+      min-width: min(700px, calc(100vw - 32px)) !important;
+      min-height: min(430px, calc(100vh - 32px)) !important;
+      max-width: calc(100vw - 32px) !important;
+      max-height: calc(100vh - 32px) !important;
+    }
+
+    .nps-et-record-header {
+      padding: 8px 12px !important;
+    }
+
+    .nps-et-record-tabs button {
+      padding: 8px 10px !important;
     }
 
     .nps-et-record-body {
       min-height: 0;
       overflow: auto;
+      padding: 14px 16px !important;
+    }
+
+    .nps-et-section {
+      margin-bottom: 14px !important;
+    }
+
+    .nps-et-section h3 {
+      margin-bottom: 8px !important;
+    }
+
+    .nps-et-form-grid {
+      gap: 10px 12px !important;
+    }
+
+    .nps-et-field {
+      gap: 4px !important;
+    }
+
+    .nps-et-field input,
+    .nps-et-field select {
+      height: 34px !important;
+    }
+
+    .nps-et-record-footer {
+      padding: 8px 12px !important;
     }
 
     .nps-et-record-header,
@@ -25,7 +59,7 @@ export function installEventTreeRecordDialogSizePatch(): void {
       flex-shrink: 0;
     }
 
-    @media (max-width: 904px), (max-height: 544px) {
+    @media (max-width: 732px), (max-height: 462px) {
       .nps-et-record-dialog {
         width: calc(100vw - 12px) !important;
         height: calc(100vh - 12px) !important;
@@ -33,6 +67,10 @@ export function installEventTreeRecordDialogSizePatch(): void {
         min-height: 0 !important;
         max-width: calc(100vw - 12px) !important;
         max-height: calc(100vh - 12px) !important;
+      }
+
+      .nps-et-form-grid {
+        grid-template-columns: 1fr !important;
       }
     }
   `;
