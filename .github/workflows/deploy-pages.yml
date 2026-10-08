@@ -32,6 +32,9 @@ jobs:
       - name: Build NextPSA for GitHub Pages
         run: npx ng build --configuration production --base-href /nextpsa/
 
+      - name: Add SPA fallback
+        run: cp ./dist/nextpsa/browser/index.html ./dist/nextpsa/browser/404.html
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
         with:
