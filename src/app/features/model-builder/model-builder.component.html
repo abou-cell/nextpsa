@@ -1,0 +1,45 @@
+<div class="workspace-shell">
+  <main class="workspace-grid" [class.inspector-hidden]="!inspectorVisible">
+    <aside class="left-panel panel" [style.width.px]="paletteWidth" style="position:relative; overflow-x:hidden;">
+      <section class="panel-section component-library-section">
+        <div class="panel-heading"><span>Component library</span><button type="button" class="icon-button">+</button></div>
+        <div class="search-box">⌕ Search components</div>
+        <div class="gojs-palette-shell" *ngIf="domain === 'hydraulic'">
+          <div class="palette-table-header"><span>Symbol</span><span>Component / description</span></div>
+          <div #paletteDiv class="gojs-palette" style="overflow:hidden;"></div>
+          <div class="palette-hint">Drag a component row onto the hydraulic canvas</div>
+        </div>
+        <div class="palette-grid" *ngIf="domain !== 'hydraulic'">
+          <button *ngFor="let item of palette" type="button" class="palette-item"><span class="palette-symbol">{{ item.symbol }}</span><span>{{ item.label }}</span></button>
+        </div>
+      </section>
+      <div class="palette-resize-handle" role="separator" aria-orientation="vertical" title="Drag left or right to resize the component library" (mousedown)="startPaletteResize($event)"></div>
+    </aside>
+    <section class="editor-area">
+      <div class="editor-toolbar">
+        <div class="workspace-name"><strong>{{ workspaceLabel }}</strong><span>{{ selectedSystemId }}</span></div>
+        <div class="tool-group"><button type="button" (click)="undo()" title="Undo">↶</button><button type="button" (click)="redo()" title="Redo">↷</button></div>
+        <div class="tool-group"><button type="button" (click)="selectAllComponents()">▣ All</button><button type="button" (click)="clearSelection()">× Sel</button><button type="button">⌁</button><button type="button">⌫</button></div>
+        <div class="tool-group"><button type="button" (click)="zoomOut()">−</button><button type="button" (click)="fit()">Fit</button><button type="button" (click)="zoomIn()">+</button></div>
+        <div class="toolbar-spacer"></div>
+        <div class="inspector-actions"><button type="button" class="properties-toggle" [class.active]="inspectorVisible && inspectorTab === 'properties'" (click)="setInspectorTab('properties')">▦ Properties</button><button type="button" class="properties-toggle" [class.active]="inspectorVisible && inspectorTab === 'failures'" (click)="setInspectorTab('failures')">⚠ Failures</button><button type="button" class="properties-toggle" [class.active]="inspectorVisible && inspectorTab === 'rules'" (click)="setInspectorTab('rules')">ƒ Rules</button></div>
+        <button type="button" class="validate">✓ Validate</button>
+      </div>
+      <div class="editor-main">
+        <div class="canvas-stack"><div #diagramDiv class="diagram"></div><div class="canvas-badge">P&amp;ID workspace · wheel zoom · rubber-band multi-select · normalized symbols · orthogonal pipes</div></div>
+        <section class="systems-panel">
+          <header class="systems-header"><div><strong>{{ domainLabel }} systems</strong><span>{{ systems.length }} system{{ systems.length > 1 ? 's' : '' }} · click a row to open its diagram</span></div><button type="button" class="new-system-button">+ New system</button></header>
+          <div class="systems-table-wrap"><table class="systems-table"><thead><tr><th>System</th><th>Description</th><th>Creation date</th><th>Creator ID</th><th>Status</th></tr></thead><tbody><tr *ngFor="let system of systems" (click)="selectSystem(system)" [class.selected]="selectedSystemId === system.id"><td><strong>{{ system.id }}</strong></td><td>{{ system.description }}</td><td>{{ system.createdAt }}</td><td><code>{{ system.creatorId }}</code></td><td><span class="table-status"><i></i>{{ selectedSystemId === system.id ? 'Open' : 'Valid' }}</span></td></tr></tbody></table></div>
+        </section>
+      </div>
+      <footer class="editor-statusbar"><span>{{ systemRows.length }} components</span><span>{{ selectedSystemId }} system</span><span>{{ selectionCount }} selected</span><span>0 validation errors</span><span class="spacer"></span><span>Snap: 10 px</span><span>{{ zoomPercent }}%</span></footer>
+    </section>
+    <aside class="right-panel panel" *ngIf="inspectorVisible">
+      <div class="properties-panel-header"><div><strong>{{ inspectorTab | titlecase }}</strong><small>{{ selectedComponent?.identifier || selectedSystemId }} · {{ selectedComponent?.componentType || 'No component selected' }} · {{ selectedSystemId }}</small></div><button type="button" class="close-inspector" (click)="toggleInspector()">×</button></div>
+      <div class="properties-table-wrap" *ngIf="inspectorTab === 'properties'"><table class="properties-table"><thead><tr><th>Identifier</th><th>Type</th><th>KB class</th><th>Train</th><th>In</th><th>Out</th><th>Support</th><th>Status</th></tr></thead><tbody><tr *ngFor="let row of systemRows" (click)="selectSystemRow(row)" [class.selected]="selectedTableKey === row.key"><td><strong>{{ row.identifier }}</strong></td><td>{{ row.componentType }}</td><td><code>{{ row.kbClass }}</code></td><td>{{ row.train }}</td><td class="numeric">{{ row.inputs }}</td><td class="numeric">{{ row.outputs }}</td><td>{{ row.support }}</td><td><span class="mini-status"><i></i>{{ row.status }}</span></td></tr></tbody></table></div>
+      <div class="inspector-content" *ngIf="inspectorTab === 'failures'"><table class="compact-data-table" *ngIf="selectedComponent; else noSelectedComponent"><thead><tr><th>Code</th><th>Failure mode</th><th>Category</th><th>Enabled</th></tr></thead><tbody><tr *ngFor="let failure of failureModes"><td><code>{{ failure.code }}</code></td><td>{{ failure.name }}</td><td>{{ failure.category }}</td><td><span class="mini-status"><i></i>{{ failure.enabled ? 'Yes' : 'No' }}</span></td></tr></tbody></table></div>
+      <div class="inspector-content" *ngIf="inspectorTab === 'rules'"><table class="compact-data-table" *ngIf="selectedComponent; else noSelectedComponent"><thead><tr><th>ID</th><th>Rule</th><th>Condition</th><th>FT result</th></tr></thead><tbody><tr *ngFor="let rule of rules"><td><code>{{ rule.id }}</code></td><td>{{ rule.name }}</td><td>{{ rule.condition }}</td><td>{{ rule.result }}</td></tr></tbody></table></div>
+      <ng-template #noSelectedComponent><div class="properties-empty">Select a component in the diagram or Properties table.</div></ng-template>
+    </aside>
+  </main>
+</div>

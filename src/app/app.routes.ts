@@ -22,6 +22,30 @@ export const routes: Routes = [
       import('./features/event-tree/event-tree-page.component').then((m) => m.EventTreePageComponent)
   },
   {
+    path: 'model-builder/generation',
+    loadComponent: () => import('./features/model-builder/model-builder.component').then((m) => m.ModelBuilderComponent),
+    data: { workspace: 'generation' }
+  },
+  {
+    path: 'model-builder/generated-ft',
+    loadComponent: () => import('./features/model-builder/model-builder.component').then((m) => m.ModelBuilderComponent),
+    data: { workspace: 'generated-ft' }
+  },
+  {
+    path: 'model-builder/knowledge-base/rules',
+    loadComponent: () => import('./features/model-builder/model-builder.component').then((m) => m.ModelBuilderComponent),
+    data: { workspace: 'rules' }
+  },
+  {
+    path: 'model-builder/knowledge-base',
+    loadComponent: () => import('./features/model-builder/model-builder.component').then((m) => m.ModelBuilderComponent),
+    data: { workspace: 'knowledge-base' }
+  },
+  {
+    path: 'model-builder/:domain',
+    loadComponent: () => import('./features/model-builder/model-builder.component').then((m) => m.ModelBuilderComponent)
+  },
+  {
     path: 'data/basic-events',
     loadComponent: () =>
       import('./features/placeholder/feature-placeholder.component').then((m) => m.FeaturePlaceholderComponent),
