@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 190" role="img" aria-label="NextPSA branching network mark">
+  <defs>
+    <linearGradient id="branch" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2b78d0"/>
+      <stop offset="0.42" stop-color="#073c92"/>
+      <stop offset="1" stop-color="#1378ff"/>
+    </linearGradient>
+    <radialGradient id="blueNode" cx="34%" cy="24%" r="76%">
+      <stop offset="0" stop-color="#55d9ff"/>
+      <stop offset="0.42" stop-color="#179bf3"/>
+      <stop offset="1" stop-color="#0848c6"/>
+    </radialGradient>
+    <radialGradient id="redNode" cx="36%" cy="24%" r="78%">
+      <stop offset="0" stop-color="#ff7048"/>
+      <stop offset="0.44" stop-color="#ff3a22"/>
+      <stop offset="1" stop-color="#d90727"/>
+    </radialGradient>
+  </defs>
+
+  <!-- left trunk -->
+  <path d="M12 96H112" fill="none" stroke="url(#branch)" stroke-width="22" stroke-linecap="butt"/>
+
+  <!-- square loop, faithful to the original mark -->
+  <path d="M112 96V64Q112 48 128 48H170V142H128Q112 142 112 126V96" fill="none" stroke="url(#branch)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- short center continuation -->
+  <path d="M170 96H198" fill="none" stroke="url(#branch)" stroke-width="22" stroke-linecap="butt"/>
+
+  <!-- upper success branch -->
+  <path d="M170 96H190Q202 96 210 82L239 49Q248 37 263 37H299" fill="none" stroke="url(#branch)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- lower failure branch -->
+  <path d="M170 96H202Q224 96 224 118V132Q224 154 246 154H299" fill="none" stroke="url(#branch)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- subtle highlight along the blue structure -->
+  <path d="M14 90H105" fill="none" stroke="#5fb9ff" stroke-width="2.6" stroke-linecap="round" opacity=".48"/>
+  <path d="M183 85H190Q197 85 203 75L232 43Q244 29 260 29H294" fill="none" stroke="#399dff" stroke-width="2.4" stroke-linecap="round" opacity=".32"/>
+
+  <!-- terminal nodes deliberately large and fully inside the canvas -->
+  <circle cx="320" cy="38" r="31" fill="url(#blueNode)" stroke="#053eab" stroke-width="1.6"/>
+  <circle cx="320" cy="154" r="31" fill="url(#redNode)" stroke="#a8001a" stroke-width="1.6"/>
+  <ellipse cx="309" cy="27" rx="9" ry="6" fill="#fff" opacity=".25"/>
+  <ellipse cx="309" cy="143" rx="9" ry="6" fill="#fff" opacity=".20"/>
+</svg>
