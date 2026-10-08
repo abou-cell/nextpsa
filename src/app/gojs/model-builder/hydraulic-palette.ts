@@ -40,7 +40,7 @@ const ITEMS: PaletteNodeData[] = [
 
   { key: 'tpl-ic', name: 'I&C-SUPPORT', type: 'I&C', category: 'I&C', kbClass: 'SUPPORT.IC', groupLabel: 'Support', description: 'Instrumentation and control dependency', source: './pid/ic.svg' },
   { key: 'tpl-electrical-panel', name: 'ELEC-PANEL', type: 'Electrical Supply Panel', category: 'Electrical Supply Panel', kbClass: 'SUPPORT.ELECTRICAL_SUPPLY_PANEL', groupLabel: 'Support', description: 'Electrical power supply dependency', source: './pid/electrical-supply-panel.svg' },
-  { key: 'tpl-maintenance', name: 'MAINT', type: 'Maintenance', category: 'Maintenance', kbClass: 'SUPPORT.MAINTENANCE', groupLabel: 'Support', description: 'Maintenance or out-of-service state', source: './pid/maintenance.svg' }
+  { key: 'tpl-maintenance', name: 'MAINT', type: 'Maintenance', category: 'Maintenance', kbClass: 'SUPPORT.MAINTENANCE', groupLabel: 'Support', description: 'Maintenance or out-of-service state', source: './pid/maintenance.svg?v=4' }
 ];
 
 export function createHydraulicPalette(host: HTMLDivElement): go.Palette {
