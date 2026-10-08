@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">NextPSA icon</title>
+  <desc id="desc">Transparent NextPSA branching icon.</desc>
+  <defs>
+    <linearGradient id="blueStroke" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#33b6ff"/>
+      <stop offset="0.55" stop-color="#0a67de"/>
+      <stop offset="1" stop-color="#073f99"/>
+    </linearGradient>
+    <radialGradient id="blueNode" cx="35%" cy="30%" r="75%">
+      <stop offset="0" stop-color="#58d4ff"/>
+      <stop offset="0.55" stop-color="#1b9cf0"/>
+      <stop offset="1" stop-color="#0b59cf"/>
+    </radialGradient>
+    <radialGradient id="redNode" cx="35%" cy="30%" r="75%">
+      <stop offset="0" stop-color="#ff7752"/>
+      <stop offset="0.55" stop-color="#ff3b20"/>
+      <stop offset="1" stop-color="#d80719"/>
+    </radialGradient>
+  </defs>
+  <g transform="translate(5 31) scale(.66)">
+    <g fill="none" stroke="url(#blueStroke)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 50 H58"/>
+      <path d="M58 50 C64 50 66 46 66 41 V34 C66 30 69 27 74 27 H93"/>
+      <path d="M93 27 C101 27 106 24 111 18 L121 10 H148"/>
+      <path d="M58 50 C64 50 66 54 66 59 V66 C66 70 69 73 74 73 H95"/>
+      <path d="M95 73 C104 73 110 76 115 82 L121 90 H148"/>
+      <rect x="51" y="38" width="28" height="24" rx="5"/>
+    </g>
+    <circle cx="158" cy="10" r="13" fill="url(#blueNode)" stroke="#0b4aaa" stroke-width="2"/>
+    <circle cx="158" cy="90" r="13" fill="url(#redNode)" stroke="#b10b16" stroke-width="2"/>
+  </g>
+</svg>
