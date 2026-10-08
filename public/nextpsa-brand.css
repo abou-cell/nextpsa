@@ -1,4 +1,4 @@
-/* NextPSA brand: faithful branching mark with full blue/red terminal nodes visible. */
+/* NextPSA brand: faithful branching mark without the leading trunk. */
 .brand {
   width: 230px !important;
   gap: 8px !important;
@@ -10,7 +10,7 @@
   height: 40px !important;
   display: block !important;
   border-radius: 0 !important;
-  background-image: url('nextpsa-mark-exact-v4.svg?v=9') !important;
+  background-image: url('nextpsa-mark-exact-v5.svg?v=10') !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
   background-size: contain !important;
