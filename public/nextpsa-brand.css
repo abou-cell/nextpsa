@@ -1,16 +1,16 @@
-/* NextPSA brand: complete branching logo, fully visible in the header. */
+/* NextPSA brand: faithful branching mark with full blue/red terminal nodes visible. */
 .brand {
-  width: 218px !important;
-  gap: 7px !important;
+  width: 230px !important;
+  gap: 8px !important;
 }
 
 .brand .brand-mark {
-  width: 64px !important;
-  min-width: 64px !important;
-  height: 38px !important;
+  width: 76px !important;
+  min-width: 76px !important;
+  height: 40px !important;
   display: block !important;
   border-radius: 0 !important;
-  background-image: url('nextpsa-mark-v3.svg?v=8') !important;
+  background-image: url('nextpsa-mark-exact-v4.svg?v=9') !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
   background-size: contain !important;
@@ -27,11 +27,11 @@
 
 @media (max-width: 1100px) {
   .brand {
-    width: 200px !important;
+    width: 210px !important;
   }
   .brand .brand-mark {
-    width: 58px !important;
-    min-width: 58px !important;
-    height: 34px !important;
+    width: 68px !important;
+    min-width: 68px !important;
+    height: 36px !important;
   }
 }
