@@ -1,17 +1,17 @@
-/* NextPSA brand uses the exact supplied branching-network artwork.
-   Only display dimensions are adjusted here; the logo itself is not redrawn. */
+/* NextPSA brand: use the supplied artwork unchanged.
+   Only the displayed dimensions are adjusted. */
 .brand {
-  width: 248px !important;
+  width: 228px !important;
   gap: 8px !important;
 }
 
 .brand .brand-mark {
-  width: 82px !important;
-  min-width: 82px !important;
-  height: 40px !important;
+  width: 66px !important;
+  min-width: 66px !important;
+  height: 32px !important;
   display: block !important;
   border-radius: 0 !important;
-  background: url('nextpsa-mark.svg') center / contain no-repeat !important;
+  background: url('nextpsa-mark.svg?v=5') center / contain no-repeat !important;
   box-shadow: none !important;
   color: transparent !important;
   font-size: 0 !important;
@@ -25,11 +25,11 @@
 
 @media (max-width: 1100px) {
   .brand {
-    width: 218px !important;
+    width: 205px !important;
   }
   .brand .brand-mark {
-    width: 72px !important;
-    min-width: 72px !important;
-    height: 35px !important;
+    width: 60px !important;
+    min-width: 60px !important;
+    height: 29px !important;
   }
 }
